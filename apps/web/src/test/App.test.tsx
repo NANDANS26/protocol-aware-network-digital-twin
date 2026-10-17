@@ -10,6 +10,23 @@ vi.mock('../api/client', () => {
       getHealth: vi.fn(),
       getReadiness: vi.fn(),
       validateEvent: vi.fn(),
+      listAssets: vi.fn().mockResolvedValue([]),
+      listSegments: vi.fn().mockResolvedValue([]),
+      listServices: vi.fn().mockResolvedValue([]),
+      listRelationships: vi.fn().mockResolvedValue([]),
+      listEvidence: vi.fn().mockResolvedValue([]),
+      getTopology: vi.fn().mockResolvedValue({
+        nodes: [],
+        edges: [],
+        generated_at_iso: '2026-10-17T10:00:00Z',
+        node_count: 0,
+        edge_count: 0,
+        subnets_count: 0,
+        services_count: 0,
+      }),
+      listSnapshots: vi.fn().mockResolvedValue([]),
+      listCaptures: vi.fn().mockResolvedValue([]),
+      listImports: vi.fn().mockResolvedValue([]),
     },
   };
 });
@@ -109,9 +126,18 @@ describe('Application Shell & Navigation', () => {
       expect(screen.getByText(/Upload PCAP \/ PCAPNG/i)).toBeInTheDocument();
     });
 
-    // Click on Network Twin tab (Phase 03) -> renders planned placeholder view truthfully
+    // Click on Network Twin tab (Phase 02) -> renders operational Network Twin view
     const twinBtn = screen.getByRole('button', { name: /Network Twin/i });
     fireEvent.click(twinBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Network Digital Twin/i)).toBeInTheDocument();
+      expect(screen.getByText(/Phase 02 Operational/i)).toBeInTheDocument();
+    });
+
+    // Click on Scenario Laboratory tab -> renders planned placeholder view truthfully
+    const labBtn = screen.getByRole('button', { name: /Scenario Laboratory/i });
+    fireEvent.click(labBtn);
 
     await waitFor(() => {
       expect(screen.getByTestId('placeholder-view')).toBeInTheDocument();

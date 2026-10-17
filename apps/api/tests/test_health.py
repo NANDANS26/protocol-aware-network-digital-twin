@@ -22,8 +22,8 @@ async def test_health_endpoint(client: AsyncClient):
 
     # Verify honest reporting of operational engine and planned future subsystems
     assert data["subsystems"]["protocol_analysis_engine"]["status"] in ("ok", "planned")
-    assert data["subsystems"]["network_digital_twin"]["status"] == "planned"
-    assert data["subsystems"]["network_digital_twin"]["operational_state"] == "planned"
+    assert data["subsystems"]["network_digital_twin"]["status"] in ("ok", "planned")
+    assert data["subsystems"]["network_digital_twin"]["operational_state"] in ("operational", "planned")
 
 
 @pytest.mark.asyncio

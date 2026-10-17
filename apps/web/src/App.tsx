@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './views/OverviewView';
 import { ObservatoryView } from './views/ObservatoryView';
+import { NetworkTwinView } from './views/NetworkTwinView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { NAVIGATION_TABS, type NavigationTab } from './types/navigation';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
@@ -99,6 +100,8 @@ export const App: React.FC = () => {
             />
           ) : currentTab === 'observatory' ? (
             <ObservatoryView />
+          ) : currentTab === 'twin' ? (
+            <NetworkTwinView />
           ) : (
             <PlaceholderView tab={activeTabDefinition} />
           )}

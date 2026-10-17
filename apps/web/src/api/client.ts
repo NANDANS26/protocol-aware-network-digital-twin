@@ -167,6 +167,115 @@ export class NetworkTwinApiClient {
     if (status) query.set('status', status);
     return this.request<import('../types/analysis').EventListResponse>(`/analysis/jobs/${jobId}/events?${query.toString()}`);
   }
+
+  // --- Phase 02 Intelligence & Topology Endpoints ---
+
+  async listAssets(params?: { q?: string; status?: string; limit?: number; offset?: number }): Promise<import('../types/intelligence').Asset[]> {
+    const query = new URLSearchParams();
+    if (params?.q) query.set('q', params.q);
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.offset !== undefined) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<import('../types/intelligence').Asset[]>(`/assets${qs ? `?${qs}` : ''}`);
+  }
+
+  async getAsset(assetId: string): Promise<import('../types/intelligence').Asset> {
+    return this.request<import('../types/intelligence').Asset>(`/assets/${assetId}`);
+  }
+
+  async getAssetRelationships(assetId: string, limit = 100): Promise<import('../types/intelligence').CommunicationRelationship[]> {
+    return this.request<import('../types/intelligence').CommunicationRelationship[]>(`/assets/${assetId}/relationships?limit=${limit}`);
+  }
+
+  async listSegments(): Promise<import('../types/intelligence').NetworkSegment[]> {
+    return this.request<import('../types/intelligence').NetworkSegment[]>('/segments');
+  }
+
+  async listServices(assetId?: string): Promise<import('../types/intelligence').NetworkService[]> {
+    const qs = assetId ? `?asset_id=${encodeURIComponent(assetId)}` : '';
+    return this.request<import('../types/intelligence').NetworkService[]>(`/services${qs}`);
+  }
+
+  async listRelationships(params?: { assetId?: string; limit?: number; offset?: number }): Promise<import('../types/intelligence').CommunicationRelationship[]> {
+    const query = new URLSearchParams();
+    if (params?.assetId) query.set('asset_id', params.assetId);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.offset !== undefined) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<import('../types/intelligence').CommunicationRelationship[]>(`/relationships${qs ? `?${qs}` : ''}`);
+  }
+
+  async listEvidence(params?: { sourceArtifactId?: string; evidenceType?: string; limit?: number; offset?: number }): Promise<import('../types/intelligence').EvidenceRecord[]> {
+    const query = new URLSearchParams();
+    if (params?.sourceArtifactId) query.set('source_artifact_id', params.sourceArtifactId);
+    if (params?.evidenceType) query.set('evidence_type', params.evidenceType);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.offset !== undefined) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<import('../types/intelligence').EvidenceRecord[]>(`/evidence${qs ? `?${qs}` : ''}`);
+  }
+
+  async getEvidence(evidenceId: string): Promise<import('../types/intelligence').EvidenceRecord> {
+    return this.request<import('../types/intelligence').EvidenceRecord>(`/evidence/${evidenceId}`);
+  }
+
+  async importConfiguration(req: import('../types/intelligence').ConfigImportRequest): Promise<import('../types/intelligence').ConfigImportResult> {
+    return this.request<import('../types/intelligence').ConfigImportResult>('/imports', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listImports(): Promise<import('../types/intelligence').ConfigImportResult[]> {
+    return this.request<import('../types/intelligence').ConfigImportResult[]>('/imports');
+  }
+
+  async getTopology(): Promise<import('../types/intelligence').TopologyGraph> {
+    return this.request<import('../types/intelligence').TopologyGraph>('/topology');
+  }
+
+  async createSnapshot(req: { name: string; source_captures?: string[]; source_configs?: string[] }): Promise<import('../types/intelligence').TopologySnapshot> {
+    return this.request<import('../types/intelligence').TopologySnapshot>('/snapshots', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listSnapshots(): Promise<import('../types/intelligence').TopologySnapshot[]> {
+    return this.request<import('../types/intelligence').TopologySnapshot[]>('/snapshots');
+  }
+
+  async getSnapshot(snapshotId: string): Promise<import('../types/intelligence').TopologySnapshot> {
+    return this.request<import('../types/intelligence').TopologySnapshot>(`/snapshots/${snapshotId}`);
+  }
+
+  async getSnapshotGraph(snapshotId: string): Promise<import('../types/intelligence').TopologyGraph> {
+    return this.request<import('../types/intelligence').TopologyGraph>(`/snapshots/${snapshotId}/graph`);
+  }
+
+  async compareSnapshots(baseSnapshotId: string, targetSnapshotId: string): Promise<import('../types/intelligence').SnapshotComparisonDiff> {
+    return this.request<import('../types/intelligence').SnapshotComparisonDiff>('/snapshots/compare', {
+      method: 'POST',
+      body: JSON.stringify({
+        base_snapshot_id: baseSnapshotId,
+        target_snapshot_id: targetSnapshotId,
+      }),
+    });
+  }
+
+  async listCaptures(): Promise<import('../types/intelligence').CaptureMetadata[]> {
+    return this.request<import('../types/intelligence').CaptureMetadata[]>('/captures');
+  }
+
+  async getTopTalkers(jobId: string, limit = 10): Promise<import('../types/intelligence').TopTalker[]> {
+    return this.request<import('../types/intelligence').TopTalker[]>(`/analytics/top-talkers?job_id=${encodeURIComponent(jobId)}&limit=${limit}`);
+  }
+
+  async getProtocolBreakdown(jobId: string): Promise<import('../types/intelligence').ProtocolBreakdown[]> {
+    return this.request<import('../types/intelligence').ProtocolBreakdown[]>(`/analytics/protocol-breakdown?job_id=${encodeURIComponent(jobId)}`);
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();
+

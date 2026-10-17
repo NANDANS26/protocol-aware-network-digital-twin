@@ -32,9 +32,9 @@ export const NAVIGATION_TABS: TabDefinition[] = [
   {
     id: 'twin',
     label: 'Network Twin',
-    phase: 'Phase 03',
-    isImplemented: false,
-    description: 'Evidence-based topology reconstruction, versioned device graph, and active interface state.',
+    phase: 'Phase 02',
+    isImplemented: true,
+    description: 'Evidence-based topology reconstruction, asset discovery, DNS/flow correlation, and versioned snapshots.',
   },
   {
     id: 'laboratory',

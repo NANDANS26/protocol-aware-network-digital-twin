@@ -47,9 +47,9 @@ class SubsystemService:
                 last_checked=now,
             ),
             "network_digital_twin": SubsystemReport(
-                status=SubsystemState.PLANNED,
-                operational_state=OperationalState.PLANNED,
-                details="Versioned network topology and twin graph scheduled for Phase 03.",
+                status=SubsystemState.OK,
+                operational_state=OperationalState.OPERATIONAL,
+                details="Network intelligence, asset correlation, and versioned topology graph active in Phase 02.",
                 last_checked=now,
             ),
             "security_verification_engine": SubsystemReport(

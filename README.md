@@ -1,6 +1,6 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 01 Engine](https://img.shields.io/badge/Phase%2001-Protocol%20Engine%20Verified-brightgreen)](#)
+[![Phase 02 Twin](https://img.shields.io/badge/Phase%2002-Network%20Twin%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
@@ -27,15 +27,21 @@ The platform provides a unified system combining low-latency systems software wi
 
 ---
 
-## 2. Current Implementation Status (Phase 01 Operational)
+## 2. Current Implementation Status (Phase 02 Operational)
 
-Phase 01 establishes real offline PCAP/PCAPNG ingestion, zero-copy protocol decoding, and stateful flow tracking:
+Phase 02 establishes a persistent, evidence-backed network intelligence layer and digital twin:
 
-- **C++20 Ingestion & Decoder Engine**: Real PCAP and PCAPNG reader with zero-copy decoding for Ethernet II, 802.1Q VLAN, IPv4, IPv6, ARP, ICMPv4/v6, UDP, and TCP. Stream reassembler with sequence wraparound handling, and application decoders for DNS, HTTP/1.1, TLS Handshake SNI/ALPN, and QUIC. 26 unit tests (183 assertions) passing.
-- **Stateful Flow Reconstruction**: Bidirectional 5-tuple tracking with FNV-1a hashing, RFC 793/9293 TCP state machine, retransmission/out-of-order counter tracking, and zero-trust SHA-256 payload hashing.
-- **FastAPI Control Plane**: Endpoints under `/api/v1/analysis` for PCAP/PCAPNG upload, demo analysis execution, flow table queries, and paginated canonical event retrieval. Subsystem health checks dynamically detect binary operational status. 20 pytest tests passing in 1.86s.
-- **React Network Observatory**: Interactive workstation view with drag-and-drop file upload, instant demo buttons, telemetry cards, protocol/TCP-state distributions, bidirectional flow table with search/filtering and detail drawer, and raw canonical event stream viewer. Strict TypeScript and 5/5 Vitest tests passing.
-- **Canonical Contracts**: All events strictly adhere to semantic version 1.0.0 JSON Schema (`schemas/v1/network_event.schema.json`).
+- **Persistent Relational Catalog (MetadataStore)**: SQLite with WAL mode, foreign keys, and versioned schema migrations storing captures, jobs, assets, segments, services, relationships, evidence records, snapshots, and configuration imports.
+- **Columnar Event Store (AnalyticsStore)**: DuckDB + Parquet analytical storage for high-throughput packet events, supporting vector aggregation for `top-talkers` and `protocol-breakdown`.
+- **Deterministic Identity Resolution**: Multi-dimensional correlation across IP, MAC, ARP, DNS, TLS SNI, and DHCP. Classifies identity as `CONFIRMED`, `PROBABLE`, `AMBIGUOUS`, `CONFLICTING`, or `UNRESOLVED` with explicit conflict explanations.
+- **DNS & Service Correlation**: Bidirectional DNS transaction matching (0x0000 query/response correlation), A/AAAA/CNAME mapping to asset hostnames, and application protocol port mapping.
+- **Subnet & Gateway Inference**: Algorithmic CIDR prefix inference (/24 for IPv4, /64 for IPv6) and candidate default gateway detection (.1, .254) strictly marked as `INFERRED`.
+- **Configuration Importers**: Extensible importers for routing tables, ARP/neighbor tables, and CMDB device inventories (JSON/CSV) with strict schema validation.
+- **Topology Graph Builder**: Typed nodes (`ASSET`, `SUBNET`, `SERVICE`, `ROUTER`) and edges (`OBSERVED_COMMUNICATION`, `SUBNET_ATTACHMENT`, `SERVICE_DEPENDENCY`, `CONFIGURED_ROUTE`) with explicit `EvidenceClass`.
+- **Versioned Snapshots & Diff Engine**: Immutable snapshot creation with canonical SHA-256 fingerprinting, plus differential topology comparison generating evidence-backed structural explanations.
+- **Network Intelligence REST API**: Full suite under `/api/v1/assets`, `/api/v1/segments`, `/api/v1/services`, `/api/v1/relationships`, `/api/v1/evidence`, `/api/v1/imports`, `/api/v1/topology`, `/api/v1/snapshots`, `/api/v1/analytics`.
+- **React Network Twin Workstation**: 5-tab workstation view featuring Asset Explorer with identity diagnosis, interactive SVG Topology Graph with evidence-class filtering and node inspection, Auditable Evidence Inspector, Differential Snapshot Comparison with evidence explanations, and Configuration Ingestion & History.
+- **Automated Pipeline**: C++ capture processing automatically converts output events to Parquet, executes identity resolution, extracts services and relationships, infers subnets, updates metadata catalog, and takes initial baseline snapshots. 34 pytest tests and 9 vitest tests passing.
 
 See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
 
