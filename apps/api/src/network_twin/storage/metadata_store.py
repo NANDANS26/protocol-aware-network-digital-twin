@@ -20,10 +20,17 @@ from network_twin.models.intelligence import (
     TopologyNode,
     TopologySnapshot,
 )
+from network_twin.simulation.models import (
+    CounterfactualResult,
+    NetworkModel,
+    SecurityInvariant,
+    SimulationScenario,
+    VerificationResult,
+)
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class MetadataStore:
@@ -60,6 +67,8 @@ class MetadataStore:
 
             if current_version < 1:
                 self._migrate_to_v1(conn)
+            if current_version < 2:
+                self._migrate_to_v2(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -226,6 +235,80 @@ class MetadataStore:
 
             INSERT INTO schema_migrations (version, applied_at, description)
             VALUES (1, datetime('now'), 'Initial schema for captures, assets, evidence, and topology');
+            """
+        )
+        conn.commit()
+
+    def _migrate_to_v2(self, conn: sqlite3.Connection):
+        """Schema v2: Executable Network Models, Scenarios, Invariants, and Results."""
+        logger.info("Applying Metadata Store Schema Migration v2...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS network_models (
+                model_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                source_snapshot_id TEXT NOT NULL REFERENCES topology_snapshots(snapshot_id) ON DELETE CASCADE,
+                source_snapshot_fingerprint TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                model_version INTEGER NOT NULL,
+                fingerprint TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                is_counterfactual INTEGER NOT NULL DEFAULT 0,
+                parent_model_id TEXT,
+                model_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS simulation_scenarios (
+                scenario_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                base_model_id TEXT NOT NULL REFERENCES network_models(model_id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                scenario_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS counterfactual_results (
+                run_id TEXT PRIMARY KEY,
+                scenario_id TEXT NOT NULL,
+                base_model_id TEXT NOT NULL,
+                baseline_fingerprint TEXT NOT NULL,
+                counterfactual_model_id TEXT NOT NULL,
+                counterfactual_fingerprint TEXT NOT NULL,
+                applied_actions_count INTEGER NOT NULL,
+                newly_reachable_count INTEGER NOT NULL,
+                newly_blocked_count INTEGER NOT NULL,
+                invariant_regressions_count INTEGER NOT NULL,
+                executed_at TEXT NOT NULL,
+                result_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS security_invariants (
+                invariant_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                invariant_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                version TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                definition_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS verification_runs (
+                run_id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL,
+                scenario_id TEXT,
+                evaluated_at TEXT NOT NULL,
+                pass_count INTEGER NOT NULL,
+                fail_count INTEGER NOT NULL,
+                indeterminate_count INTEGER NOT NULL,
+                summary_json TEXT NOT NULL,
+                results_json TEXT NOT NULL
+            );
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (2, datetime('now'), 'Phase 03: Executable Network Models, Scenarios, Invariants, and Results');
             """
         )
         conn.commit()
@@ -923,6 +1006,237 @@ class MetadataStore:
                 )
                 for r in cur.fetchall()
             ]
+
+    # --- Phase 03: Executable Network Models & Simulation ---
+
+    def save_network_model(self, model: NetworkModel) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO network_models (
+                    model_id, name, source_snapshot_id, source_snapshot_fingerprint,
+                    schema_version, model_version, fingerprint, created_at,
+                    is_counterfactual, parent_model_id, model_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(model_id) DO UPDATE SET
+                    name=excluded.name,
+                    fingerprint=excluded.fingerprint,
+                    model_json=excluded.model_json;
+                """,
+                (
+                    model.model_id,
+                    model.name,
+                    model.source_snapshot_id,
+                    model.source_snapshot_fingerprint,
+                    model.schema_version,
+                    model.model_version,
+                    model.fingerprint,
+                    model.created_at_iso,
+                    1 if model.is_counterfactual else 0,
+                    model.parent_model_id,
+                    model.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_network_model(self, model_id: str) -> NetworkModel | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT model_json FROM network_models WHERE model_id = ?;", (model_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return NetworkModel.model_validate_json(row["model_json"])
+
+    def list_network_models(self) -> list[NetworkModel]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT model_json FROM network_models ORDER BY created_at DESC;")
+            return [NetworkModel.model_validate_json(r["model_json"]) for r in cur.fetchall()]
+
+    def save_scenario(self, scenario: SimulationScenario) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO simulation_scenarios (
+                    scenario_id, name, description, base_model_id, created_at, scenario_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(scenario_id) DO UPDATE SET
+                    name=excluded.name,
+                    description=excluded.description,
+                    scenario_json=excluded.scenario_json;
+                """,
+                (
+                    scenario.scenario_id,
+                    scenario.name,
+                    scenario.description,
+                    scenario.base_model_id,
+                    scenario.created_at_iso,
+                    scenario.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_scenario(self, scenario_id: str) -> SimulationScenario | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT scenario_json FROM simulation_scenarios WHERE scenario_id = ?;",
+                (scenario_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return SimulationScenario.model_validate_json(row["scenario_json"])
+
+    def list_scenarios(self, base_model_id: str | None = None) -> list[SimulationScenario]:
+        with self._get_connection() as conn:
+            if base_model_id:
+                cur = conn.execute(
+                    "SELECT scenario_json FROM simulation_scenarios WHERE base_model_id = ? ORDER BY created_at DESC;",
+                    (base_model_id,),
+                )
+            else:
+                cur = conn.execute("SELECT scenario_json FROM simulation_scenarios ORDER BY created_at DESC;")
+            return [SimulationScenario.model_validate_json(r["scenario_json"]) for r in cur.fetchall()]
+
+    def save_counterfactual_result(self, result: CounterfactualResult) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO counterfactual_results (
+                    run_id, scenario_id, base_model_id, baseline_fingerprint,
+                    counterfactual_model_id, counterfactual_fingerprint,
+                    applied_actions_count, newly_reachable_count, newly_blocked_count,
+                    invariant_regressions_count, executed_at, result_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    result_json=excluded.result_json;
+                """,
+                (
+                    result.run_id,
+                    result.scenario_id,
+                    result.base_model_id,
+                    result.baseline_fingerprint,
+                    result.counterfactual_model_id,
+                    result.counterfactual_fingerprint,
+                    result.applied_actions_count,
+                    result.newly_reachable_count,
+                    result.newly_blocked_count,
+                    result.invariant_regressions_count,
+                    result.executed_at_iso,
+                    result.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_counterfactual_result(self, run_id: str) -> CounterfactualResult | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT result_json FROM counterfactual_results WHERE run_id = ?;",
+                (run_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return CounterfactualResult.model_validate_json(row["result_json"])
+
+    def save_invariant(self, invariant: SecurityInvariant) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO security_invariants (
+                    invariant_id, name, description, invariant_type,
+                    severity, scope, version, created_at, definition_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(invariant_id) DO UPDATE SET
+                    name=excluded.name,
+                    description=excluded.description,
+                    severity=excluded.severity,
+                    scope=excluded.scope,
+                    definition_json=excluded.definition_json;
+                """,
+                (
+                    invariant.invariant_id,
+                    invariant.name,
+                    invariant.description,
+                    invariant.invariant_type.value,
+                    invariant.severity.value,
+                    invariant.scope,
+                    invariant.version,
+                    invariant.created_at_iso,
+                    invariant.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_invariant(self, invariant_id: str) -> SecurityInvariant | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT definition_json FROM security_invariants WHERE invariant_id = ?;",
+                (invariant_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return SecurityInvariant.model_validate_json(row["definition_json"])
+
+    def list_invariants(self) -> list[SecurityInvariant]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT definition_json FROM security_invariants ORDER BY created_at ASC;")
+            return [SecurityInvariant.model_validate_json(r["definition_json"]) for r in cur.fetchall()]
+
+    def save_verification_run(
+        self,
+        run_id: str,
+        model_id: str,
+        scenario_id: str | None,
+        results: list[VerificationResult],
+    ) -> None:
+        pass_count = sum(1 for r in results if r.status.value == "PASS")
+        fail_count = sum(1 for r in results if r.status.value == "FAIL")
+        indeterminate_count = sum(1 for r in results if r.status.value == "INDETERMINATE")
+
+        summary = {
+            "total": len(results),
+            "pass": pass_count,
+            "fail": fail_count,
+            "indeterminate": indeterminate_count,
+        }
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO verification_runs (
+                    run_id, model_id, scenario_id, evaluated_at,
+                    pass_count, fail_count, indeterminate_count,
+                    summary_json, results_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    results_json=excluded.results_json;
+                """,
+                (
+                    run_id,
+                    model_id,
+                    scenario_id,
+                    datetime.now(UTC).isoformat(),
+                    pass_count,
+                    fail_count,
+                    indeterminate_count,
+                    json.dumps(summary),
+                    json.dumps([r.model_dump() for r in results]),
+                ),
+            )
+            conn.commit()
+
+    def get_verification_run(self, run_id: str) -> list[VerificationResult] | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT results_json FROM verification_runs WHERE run_id = ?;",
+                (run_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = json.loads(row["results_json"])
+            return [VerificationResult.model_validate(item) for item in data]
 
 
 metadata_store = MetadataStore()

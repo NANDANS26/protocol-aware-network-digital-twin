@@ -1,9 +1,9 @@
 """Full end-to-end integration test traversing C++ engine -> Parquet -> SQLite -> Topology -> API."""
 
 from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from network_twin.config import AppSettings
 from network_twin.main import create_app
 from network_twin.services.analysis_service import AnalysisService
@@ -15,8 +15,7 @@ async def test_full_phase02_engine_to_twin_pipeline(tmp_path: Path):
     sample_pcap = project_root / "tests" / "fixtures" / "sample_capture.pcap"
     assert sample_pcap.is_file(), f"Fixture {sample_pcap} must exist."
 
-    with open(sample_pcap, "rb") as f:
-        content = f.read()
+    content = sample_pcap.read_bytes()
 
     cfg = AppSettings(
         environment="testing",

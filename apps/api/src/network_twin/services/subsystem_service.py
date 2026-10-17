@@ -53,9 +53,9 @@ class SubsystemService:
                 last_checked=now,
             ),
             "security_verification_engine": SubsystemReport(
-                status=SubsystemState.PLANNED,
-                operational_state=OperationalState.PLANNED,
-                details="Deterministic security verification engine scheduled for Phase 04.",
+                status=SubsystemState.OK,
+                operational_state=OperationalState.OPERATIONAL,
+                details="Deterministic reachability, invariant verification, and counterfactual simulation active in Phase 03.",
                 last_checked=now,
             ),
         }

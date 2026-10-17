@@ -275,7 +275,88 @@ export class NetworkTwinApiClient {
   async getProtocolBreakdown(jobId: string): Promise<import('../types/intelligence').ProtocolBreakdown[]> {
     return this.request<import('../types/intelligence').ProtocolBreakdown[]>(`/analytics/protocol-breakdown?job_id=${encodeURIComponent(jobId)}`);
   }
+
+  // --- Phase 03 Simulation, Reachability & Security Verification Endpoints ---
+
+  async buildNetworkModel(req: import('../types/simulation').BuildModelRequest): Promise<import('../types/simulation').NetworkModel> {
+    return this.request<import('../types/simulation').NetworkModel>('/models/build', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listModels(): Promise<import('../types/simulation').NetworkModel[]> {
+    return this.request<import('../types/simulation').NetworkModel[]>('/models');
+  }
+
+  async getModel(modelId: string): Promise<import('../types/simulation').NetworkModel> {
+    return this.request<import('../types/simulation').NetworkModel>(`/models/${modelId}`);
+  }
+
+  async getModelLimitations(modelId: string): Promise<import('../types/simulation').ModelLimitation[]> {
+    return this.request<import('../types/simulation').ModelLimitation[]>(`/models/${modelId}/limitations`);
+  }
+
+  async evaluateReachability(query: import('../types/simulation').ReachabilityQuery): Promise<import('../types/simulation').ReachabilityResult> {
+    return this.request<import('../types/simulation').ReachabilityResult>('/simulations/reachability', {
+      method: 'POST',
+      body: JSON.stringify(query),
+    });
+  }
+
+  async createScenario(scenario: import('../types/simulation').SimulationScenario): Promise<import('../types/simulation').SimulationScenario> {
+    return this.request<import('../types/simulation').SimulationScenario>('/simulations/scenarios', {
+      method: 'POST',
+      body: JSON.stringify(scenario),
+    });
+  }
+
+  async listScenarios(baseModelId?: string): Promise<import('../types/simulation').SimulationScenario[]> {
+    const query = baseModelId ? `?base_model_id=${encodeURIComponent(baseModelId)}` : '';
+    return this.request<import('../types/simulation').SimulationScenario[]>(`/simulations/scenarios${query}`);
+  }
+
+  async getScenario(scenarioId: string): Promise<import('../types/simulation').SimulationScenario> {
+    return this.request<import('../types/simulation').SimulationScenario>(`/simulations/scenarios/${scenarioId}`);
+  }
+
+  async runScenario(
+    scenarioId: string,
+    req?: import('../types/simulation').RunScenarioRequest
+  ): Promise<import('../types/simulation').CounterfactualResult> {
+    return this.request<import('../types/simulation').CounterfactualResult>(`/simulations/scenarios/${scenarioId}/run`, {
+      method: 'POST',
+      body: JSON.stringify(req || {}),
+    });
+  }
+
+  async getCounterfactualResult(scenarioId: string): Promise<import('../types/simulation').CounterfactualResult> {
+    return this.request<import('../types/simulation').CounterfactualResult>(`/simulations/scenarios/${scenarioId}/result`);
+  }
+
+  async listInvariants(): Promise<import('../types/simulation').SecurityInvariant[]> {
+    return this.request<import('../types/simulation').SecurityInvariant[]>('/verification/invariants');
+  }
+
+  async createInvariant(invariant: import('../types/simulation').SecurityInvariant): Promise<import('../types/simulation').SecurityInvariant> {
+    return this.request<import('../types/simulation').SecurityInvariant>('/verification/invariants', {
+      method: 'POST',
+      body: JSON.stringify(invariant),
+    });
+  }
+
+  async runVerification(req: import('../types/simulation').RunVerificationRequest): Promise<import('../types/simulation').VerificationResult[]> {
+    return this.request<import('../types/simulation').VerificationResult[]>('/verification/run', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async getVerificationResults(runId: string): Promise<import('../types/simulation').VerificationResult[]> {
+    return this.request<import('../types/simulation').VerificationResult[]>(`/verification/runs/${runId}`);
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();
+
 

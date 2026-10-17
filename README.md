@@ -1,6 +1,6 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 02 Twin](https://img.shields.io/badge/Phase%2002-Network%20Twin%20Verified-brightgreen)](#)
+[![Phase 03 Twin & Verification](https://img.shields.io/badge/Phase%2003-Twin%20%26%20Verification%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
@@ -27,21 +27,17 @@ The platform provides a unified system combining low-latency systems software wi
 
 ---
 
-## 2. Current Implementation Status (Phase 02 Operational)
+## 2. Current Implementation Status (Phase 03 Operational)
 
-Phase 02 establishes a persistent, evidence-backed network intelligence layer and digital twin:
+Phase 03 establishes an executable, deterministic network digital twin and formal security verification engine:
 
-- **Persistent Relational Catalog (MetadataStore)**: SQLite with WAL mode, foreign keys, and versioned schema migrations storing captures, jobs, assets, segments, services, relationships, evidence records, snapshots, and configuration imports.
-- **Columnar Event Store (AnalyticsStore)**: DuckDB + Parquet analytical storage for high-throughput packet events, supporting vector aggregation for `top-talkers` and `protocol-breakdown`.
-- **Deterministic Identity Resolution**: Multi-dimensional correlation across IP, MAC, ARP, DNS, TLS SNI, and DHCP. Classifies identity as `CONFIRMED`, `PROBABLE`, `AMBIGUOUS`, `CONFLICTING`, or `UNRESOLVED` with explicit conflict explanations.
-- **DNS & Service Correlation**: Bidirectional DNS transaction matching (0x0000 query/response correlation), A/AAAA/CNAME mapping to asset hostnames, and application protocol port mapping.
-- **Subnet & Gateway Inference**: Algorithmic CIDR prefix inference (/24 for IPv4, /64 for IPv6) and candidate default gateway detection (.1, .254) strictly marked as `INFERRED`.
-- **Configuration Importers**: Extensible importers for routing tables, ARP/neighbor tables, and CMDB device inventories (JSON/CSV) with strict schema validation.
-- **Topology Graph Builder**: Typed nodes (`ASSET`, `SUBNET`, `SERVICE`, `ROUTER`) and edges (`OBSERVED_COMMUNICATION`, `SUBNET_ATTACHMENT`, `SERVICE_DEPENDENCY`, `CONFIGURED_ROUTE`) with explicit `EvidenceClass`.
-- **Versioned Snapshots & Diff Engine**: Immutable snapshot creation with canonical SHA-256 fingerprinting, plus differential topology comparison generating evidence-backed structural explanations.
-- **Network Intelligence REST API**: Full suite under `/api/v1/assets`, `/api/v1/segments`, `/api/v1/services`, `/api/v1/relationships`, `/api/v1/evidence`, `/api/v1/imports`, `/api/v1/topology`, `/api/v1/snapshots`, `/api/v1/analytics`.
-- **React Network Twin Workstation**: 5-tab workstation view featuring Asset Explorer with identity diagnosis, interactive SVG Topology Graph with evidence-class filtering and node inspection, Auditable Evidence Inspector, Differential Snapshot Comparison with evidence explanations, and Configuration Ingestion & History.
-- **Automated Pipeline**: C++ capture processing automatically converts output events to Parquet, executes identity resolution, extracts services and relationships, infers subnets, updates metadata catalog, and takes initial baseline snapshots. 34 pytest tests and 9 vitest tests passing.
+- **Formal Executable Network Model**: Strongly typed `NetworkModel` constructed deterministically from versioned topology snapshots with canonical SHA-256 state fingerprinting, model limitations ledger, and isolated zone representations.
+- **Deterministic Forwarding Engine**: Discrete packet traversal simulation with Longest-Prefix-Match (LPM), metric tie-breaking, recursive next-hop resolution, forwarding loop detection, and directional first-match firewall ACL evaluation.
+- **Security Invariant Verification Engine**: Deterministic evaluator for all 7 invariant types (`ISOLATION`, `REQUIRED_REACHABILITY`, `PORT_RESTRICTION`, `CONFIGURATION_CONSISTENCY`, `SHADOWED_RULE`, `SEGMENTATION`, `LOOP_FREEDOM`) with counterexample witness paths.
+- **Counterfactual Simulation Engine**: Non-destructive what-if mutation engine operating on isolated deep-cloned models (`ADD_ROUTE`, `REMOVE_ROUTE`, `ADD_FIREWALL_RULE`, `REMOVE_FIREWALL_RULE`, `TOGGLE_INTERFACE_STATE`, etc.) producing comparative baseline-vs-counterfactual diff matrices.
+- **Simulation & Verification REST API**: Comprehensive REST endpoints under `/api/v1/models`, `/api/v1/simulations`, and `/api/v1/verification`.
+- **React Network Twin Workstation**: 9-module workstation featuring Asset Explorer, SVG Topology Graph, Auditable Evidence Inspector, Differential Snapshot Comparison, Reachability Workbench, Security Invariant Verification Engine, Counterfactual What-If Studio, Model Inspector with canonical SHA-256 fingerprints, and Configuration Ingestion.
+- **Full Automated Quality Gates**: 49 pytest tests, 13 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
 
 See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
 

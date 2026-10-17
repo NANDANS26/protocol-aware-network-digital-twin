@@ -131,8 +131,8 @@ describe('Application Shell & Navigation', () => {
     fireEvent.click(twinBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Network Digital Twin/i)).toBeInTheDocument();
-      expect(screen.getByText(/Phase 02 Operational/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: /Network Digital Twin/i })).toBeInTheDocument();
+      expect(screen.getByText(/Phase 0[23] Operational/i)).toBeInTheDocument();
     });
 
     // Click on Scenario Laboratory tab -> renders planned placeholder view truthfully

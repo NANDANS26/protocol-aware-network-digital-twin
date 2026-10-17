@@ -3,8 +3,8 @@ Deterministic PCAP and PCAPNG test fixture generator for Protocol-Aware Network 
 Generates genuine byte-level packet captures for testing the C++ analysis engine.
 """
 
-import struct
 import os
+import struct
 from pathlib import Path
 
 

@@ -15,6 +15,19 @@ import type {
   IdentityStatus,
   EvidenceClass,
 } from '../types/intelligence';
+import type {
+  NetworkModel,
+  ReachabilityQuery,
+  ReachabilityResult,
+  SecurityInvariant,
+  VerificationResult,
+  SimulationScenario,
+  CounterfactualResult,
+} from '../types/simulation';
+import { ReachabilityWorkbench } from './twin/ReachabilityWorkbench';
+import { SecurityVerificationView } from './twin/SecurityVerificationView';
+import { CounterfactualScenarioView } from './twin/CounterfactualScenarioView';
+import { ModelInspectorView } from './twin/ModelInspectorView';
 import {
   Server,
   Network,
@@ -31,10 +44,25 @@ import {
   ArrowRight,
   Database,
   Info,
+  ShieldCheck,
+  Cpu,
+  Route,
+  Activity,
 } from 'lucide-react';
 
+export type TwinTab =
+  | 'assets'
+  | 'topology'
+  | 'reachability'
+  | 'verification'
+  | 'counterfactual'
+  | 'models'
+  | 'evidence'
+  | 'comparison'
+  | 'imports';
+
 export const NetworkTwinView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'assets' | 'topology' | 'evidence' | 'comparison' | 'imports'>('assets');
+  const [activeTab, setActiveTab] = useState<TwinTab>('assets');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +76,16 @@ export const NetworkTwinView: React.FC = () => {
   const [snapshots, setSnapshots] = useState<TopologySnapshot[]>([]);
   const [captures, setCaptures] = useState<CaptureMetadata[]>([]);
   const [importHistory, setImportHistory] = useState<ConfigImportResult[]>([]);
+
+  // Phase 03 Simulation and Verification states
+  const [models, setModels] = useState<NetworkModel[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [invariants, setInvariants] = useState<SecurityInvariant[]>([]);
+  const [verificationResults, setVerificationResults] = useState<VerificationResult[]>([]);
+  const [scenarios, setScenarios] = useState<SimulationScenario[]>([]);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
+  const [counterfactualResult, setCounterfactualResult] = useState<CounterfactualResult | null>(null);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
 
   // Selection & filter states
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
@@ -94,7 +132,7 @@ export const NetworkTwinView: React.FC = () => {
   const [importing, setImporting] = useState<boolean>(false);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
 
-  // Fetch all primary model data
+  // Fetch all primary model and simulation data
   const loadTwinData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -109,6 +147,9 @@ export const NetworkTwinView: React.FC = () => {
         snapData,
         capData,
         impData,
+        modelsData,
+        invariantsData,
+        scenariosData,
       ] = await Promise.all([
         apiClient.listAssets(),
         apiClient.listSegments(),
@@ -119,6 +160,9 @@ export const NetworkTwinView: React.FC = () => {
         apiClient.listSnapshots(),
         apiClient.listCaptures(),
         apiClient.listImports(),
+        apiClient.listModels ? apiClient.listModels().catch(() => []) : Promise.resolve([]),
+        apiClient.listInvariants ? apiClient.listInvariants().catch(() => []) : Promise.resolve([]),
+        apiClient.listScenarios ? apiClient.listScenarios().catch(() => []) : Promise.resolve([]),
       ]);
 
       setAssets(assetsData);
@@ -131,6 +175,17 @@ export const NetworkTwinView: React.FC = () => {
       setCaptures(capData);
       setImportHistory(impData);
 
+      setModels(modelsData);
+      if (modelsData.length > 0 && !selectedModelId && modelsData[0]) {
+        setSelectedModelId(modelsData[0].model_id);
+      }
+
+      setInvariants(invariantsData);
+      setScenarios(scenariosData);
+      if (scenariosData.length > 0 && !selectedScenarioId && scenariosData[0]) {
+        setSelectedScenarioId(scenariosData[0].scenario_id);
+      }
+
       if (snapData.length >= 2 && !baseSnapshotId && !targetSnapshotId) {
         setBaseSnapshotId(snapData[0]?.snapshot_id || '');
         setTargetSnapshotId(snapData[1]?.snapshot_id || '');
@@ -142,7 +197,87 @@ export const NetworkTwinView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [baseSnapshotId, targetSnapshotId]);
+  }, [baseSnapshotId, targetSnapshotId, selectedModelId, selectedScenarioId]);
+
+  // Phase 03 Action Handlers
+  const handleEvaluateReachability = async (query: ReachabilityQuery): Promise<ReachabilityResult | null> => {
+    setActionLoading(true);
+    try {
+      const res = await apiClient.evaluateReachability(query);
+      return res;
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to evaluate reachability');
+      return null;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRunVerification = async (modelId: string): Promise<VerificationResult[]> => {
+    setActionLoading(true);
+    try {
+      const results = await apiClient.runVerification({ model_id: modelId });
+      setVerificationResults(results);
+      return results;
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to run verification');
+      return [];
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateInvariant = async (inv: SecurityInvariant): Promise<void> => {
+    setActionLoading(true);
+    try {
+      const saved = await apiClient.createInvariant(inv);
+      setInvariants((prev) => [saved, ...prev]);
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to create invariant');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRunScenario = async (scenId: string): Promise<CounterfactualResult | null> => {
+    setActionLoading(true);
+    try {
+      const res = await apiClient.runScenario(scenId);
+      setCounterfactualResult(res);
+      return res;
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to run scenario');
+      return null;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateScenario = async (scen: SimulationScenario): Promise<void> => {
+    setActionLoading(true);
+    try {
+      const saved = await apiClient.createScenario(scen);
+      setScenarios((prev) => [saved, ...prev]);
+      setSelectedScenarioId(saved.scenario_id);
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to create scenario');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBuildModel = async (snapshotId: string, name?: string): Promise<void> => {
+    setActionLoading(true);
+    try {
+      const model = await apiClient.buildNetworkModel({ snapshot_id: snapshotId, name });
+      setModels((prev) => [model, ...prev]);
+      setSelectedModelId(model.model_id);
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to build network model');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadTwinData();
@@ -306,11 +441,11 @@ export const NetworkTwinView: React.FC = () => {
               <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
                 Network Digital Twin
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-mono font-medium">
-                  Phase 02 Operational
+                  Phase 03 Operational
                 </span>
               </h1>
               <p className="text-xs text-gray-400 mt-0.5">
-                Evidence-backed topology reconstruction, persistent asset inventory, DNS resolution correlation & versioned snapshots
+                Executable network digital twin, deterministic reachability, security invariants & counterfactual simulation
               </p>
             </div>
           </div>
@@ -441,6 +576,63 @@ export const NetworkTwinView: React.FC = () => {
         >
           <GitCompare className="w-3.5 h-3.5" />
           <span>Snapshot Comparison</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reachability')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'reachability'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <Route className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Reachability</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('verification')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'verification'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Security Invariants</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
+            {invariants.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('counterfactual')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'counterfactual'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5 text-purple-400" />
+          <span>What-If Scenarios</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
+            {scenarios.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('models')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'models'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <Cpu className="w-3.5 h-3.5 text-amber-400" />
+          <span>Model Inspector</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
+            {models.length}
+          </span>
         </button>
 
         <button
@@ -1445,6 +1637,59 @@ export const NetworkTwinView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB CONTENT: REACHABILITY WORKBENCH */}
+      {activeTab === 'reachability' && (
+        <ReachabilityWorkbench
+          models={models}
+          selectedModelId={selectedModelId}
+          onSelectModel={setSelectedModelId}
+          onEvaluate={handleEvaluateReachability}
+          loading={actionLoading}
+        />
+      )}
+
+      {/* TAB CONTENT: SECURITY INVARIANTS & VERIFICATION */}
+      {activeTab === 'verification' && (
+        <SecurityVerificationView
+          models={models}
+          selectedModelId={selectedModelId}
+          onSelectModel={setSelectedModelId}
+          invariants={invariants}
+          verificationResults={verificationResults}
+          onRunVerification={handleRunVerification}
+          onCreateInvariant={handleCreateInvariant}
+          loading={actionLoading}
+        />
+      )}
+
+      {/* TAB CONTENT: WHAT-IF SCENARIOS & COUNTERFACTUAL SIMULATION */}
+      {activeTab === 'counterfactual' && (
+        <CounterfactualScenarioView
+          models={models}
+          selectedModelId={selectedModelId}
+          onSelectModel={setSelectedModelId}
+          scenarios={scenarios}
+          selectedScenarioId={selectedScenarioId}
+          onSelectScenario={setSelectedScenarioId}
+          onRunScenario={handleRunScenario}
+          onCreateScenario={handleCreateScenario}
+          counterfactualResult={counterfactualResult}
+          loading={actionLoading}
+        />
+      )}
+
+      {/* TAB CONTENT: MODEL INSPECTOR */}
+      {activeTab === 'models' && (
+        <ModelInspectorView
+          models={models}
+          selectedModelId={selectedModelId}
+          onSelectModel={setSelectedModelId}
+          snapshots={snapshots}
+          onBuildModel={handleBuildModel}
+          loading={loading || actionLoading}
+        />
       )}
 
       {/* Snapshot Creation Modal */}

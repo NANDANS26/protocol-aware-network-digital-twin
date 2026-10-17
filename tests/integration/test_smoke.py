@@ -1,14 +1,13 @@
 """Integration smoke tests verifying end-to-end foundation health across C++ and Python."""
 
 import subprocess
-import sys
 from pathlib import Path
+
+import jsonschema
 import pytest
 from httpx import ASGITransport, AsyncClient
-import jsonschema
-
-from network_twin.main import create_app
 from network_twin.config import AppSettings
+from network_twin.main import create_app
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
