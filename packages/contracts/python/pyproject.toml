@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "network-twin-contracts"
+version = "1.0.0"
+description = "Canonical contracts and schemas for Protocol-Aware Network Digital Twin"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

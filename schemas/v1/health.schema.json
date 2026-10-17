@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.protocol-twin.local/v1/health.schema.json",
+  "title": "HealthStatusResponse",
+  "description": "Standard schema for service health and readiness endpoints.",
+  "type": "object",
+  "required": [
+    "status",
+    "timestamp",
+    "version",
+    "schema_version",
+    "subsystems"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "unhealthy", "not_ready"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "version": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string"
+    },
+    "subsystems": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "operational_state"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "degraded", "down", "disabled", "planned"]
+          },
+          "operational_state": {
+            "type": "string",
+            "enum": ["operational", "unavailable", "planned"]
+          },
+          "details": {
+            "type": ["string", "null"]
+          },
+          "last_checked": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

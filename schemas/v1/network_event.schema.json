@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.protocol-twin.local/v1/network_event.schema.json",
+  "title": "NetworkEvent",
+  "description": "Canonical schema v1 for structured protocol analysis and packet observation events in the Protocol-Aware Network Digital Twin platform.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "timestamp_ns",
+    "timestamp_iso",
+    "source_id",
+    "parser_status",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Semantic version of the event schema."
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique stable identifier for the event (UUIDv4 or UUIDv7)."
+    },
+    "timestamp_ns": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Nanoseconds since Unix epoch (UTC) for high-precision packet timing."
+    },
+    "timestamp_iso": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 formatted UTC timestamp string (e.g. 2026-10-17T08:30:00.123456789Z)."
+    },
+    "source_id": {
+      "type": "string",
+      "description": "Identifier of the ingestion point, sensor, PCAP file, or live interface."
+    },
+    "flow_id": {
+      "type": ["string", "null"],
+      "description": "Deterministic flow correlation key (e.g. sha256 of canonical 5-tuple)."
+    },
+    "flow_direction": {
+      "type": ["string", "null"],
+      "enum": ["forward", "reverse", "unknown", null],
+      "description": "Direction relative to the initiator of the flow."
+    },
+    "link_layer": {
+      "type": ["object", "null"],
+      "properties": {
+        "source_mac": {
+          "type": ["string", "null"],
+          "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+        },
+        "destination_mac": {
+          "type": ["string", "null"],
+          "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+        },
+        "ether_type": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "vlan_id": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 4095
+        }
+      },
+      "additionalProperties": false
+    },
+    "network_layer": {
+      "type": ["object", "null"],
+      "properties": {
+        "version": {
+          "type": ["string", "null"],
+          "enum": ["IPv4", "IPv6", null]
+        },
+        "source_ip": {
+          "type": ["string", "null"],
+          "description": "Canonical IPv4 or IPv6 string."
+        },
+        "destination_ip": {
+          "type": ["string", "null"],
+          "description": "Canonical IPv4 or IPv6 string."
+        },
+        "ttl_or_hop_limit": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "identification": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "flags": {
+          "type": ["object", "null"],
+          "properties": {
+            "df": { "type": "boolean" },
+            "mf": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "transport_layer": {
+      "type": ["object", "null"],
+      "properties": {
+        "protocol": {
+          "type": ["string", "null"],
+          "enum": ["TCP", "UDP", "ICMP", "ICMPv6", "SCTP", "OTHER", null]
+        },
+        "source_port": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "destination_port": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "tcp_sequence_number": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "tcp_acknowledgment_number": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "tcp_flags": {
+          "type": ["object", "null"],
+          "properties": {
+            "syn": { "type": "boolean" },
+            "ack": { "type": "boolean" },
+            "fin": { "type": "boolean" },
+            "rst": { "type": "boolean" },
+            "psh": { "type": "boolean" },
+            "urg": { "type": "boolean" },
+            "ece": { "type": "boolean" },
+            "cwr": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "window_size": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 65535
+        }
+      },
+      "additionalProperties": false
+    },
+    "application_layer": {
+      "type": ["object", "null"],
+      "properties": {
+        "protocol": {
+          "type": ["string", "null"],
+          "description": "Recognized application protocol (e.g., DNS, HTTP, TLS, SSH, DHCP)."
+        },
+        "payload_length_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "protocol_metadata": {
+          "type": "object",
+          "description": "Protocol-specific decoded fields.",
+          "additionalProperties": true
+        },
+        "payload_hash_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "Cryptographic hash of the payload for zero-trust integrity without retaining sensitive raw bytes."
+        },
+        "sanitized_preview": {
+          "type": ["string", "null"],
+          "maxLength": 512,
+          "description": "Sanitized, truncated, non-sensitive textual preview if permitted by policy."
+        }
+      },
+      "additionalProperties": false
+    },
+    "parser_status": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ok", "incomplete", "malformed", "unsupported_protocol", "checksum_error", "truncated"]
+        },
+        "diagnostic_code": {
+          "type": ["string", "null"]
+        },
+        "diagnostic_message": {
+          "type": ["string", "null"]
+        },
+        "bytes_consumed": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "bytes_remaining": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["packet_index", "wire_length_bytes", "capture_length_bytes"],
+      "properties": {
+        "packet_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sequential index within the capture stream or file."
+        },
+        "wire_length_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Length of packet as seen on the physical/virtual wire."
+        },
+        "capture_length_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Length actually captured (snaplen limit)."
+        },
+        "capture_interface": {
+          "type": ["string", "null"]
+        },
+        "capture_file_path": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

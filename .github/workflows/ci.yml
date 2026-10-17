@@ -1,0 +1,88 @@
+name: CI Quality Gates
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine-cpp:
+    name: C++20 Systems Engine Build & Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build/engine -S engine/protocol -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Engine
+        run: cmake --build build/engine --config Release
+
+      - name: Run C++ Unit Tests
+        run: ctest --test-dir build/engine -C Release --output-on-failure
+
+  backend-python:
+    name: Backend API & Contract Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements-dev.txt
+          pip install -e packages/contracts/python
+          pip install -e apps/api
+
+      - name: Run Ruff Linter
+        run: ruff check apps/api packages/contracts/python
+
+      - name: Run Pytest Suite
+        run: pytest apps/api/tests tests/integration -v
+
+  frontend-web:
+    name: React Workstation Typecheck & Vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install Web Dependencies
+        run: |
+          cd apps/web
+          npm ci
+
+      - name: Strict TypeScript Type Check
+        run: |
+          cd apps/web
+          npm run typecheck
+
+      - name: Run Vitest Suite
+        run: |
+          cd apps/web
+          npm run test
+
+      - name: Production Vite Build
+        run: |
+          cd apps/web
+          npm run build
