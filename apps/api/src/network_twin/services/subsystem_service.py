@@ -58,6 +58,12 @@ class SubsystemService:
                 details="Deterministic reachability, invariant verification, and counterfactual simulation active in Phase 03.",
                 last_checked=now,
             ),
+            "protocol_testing_engine": SubsystemReport(
+                status=SubsystemState.OK,
+                operational_state=OperationalState.OPERATIONAL,
+                details="Protocol-aware test generation, differential fuzzing, and regression harness active in Phase 04.",
+                last_checked=now,
+            ),
         }
 
         # Check Database dependency if configured

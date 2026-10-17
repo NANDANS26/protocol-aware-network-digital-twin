@@ -46,9 +46,9 @@ export const NAVIGATION_TABS: TabDefinition[] = [
   {
     id: 'research',
     label: 'Protocol Research Lab',
-    phase: 'Phase 07',
-    isImplemented: false,
-    description: 'Isolated protocol fuzzing, state machine differential testing, and grammar synthesis.',
+    phase: 'Phase 04',
+    isImplemented: true,
+    description: 'Protocol-aware security test generation, mutation fuzzing, differential testing, and regression suite.',
   },
   {
     id: 'investigation',

@@ -1,12 +1,12 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 03 Twin & Verification](https://img.shields.io/badge/Phase%2003-Twin%20%26%20Verification%20Verified-brightgreen)](#)
+[![Phase 04 Security Testing & Fuzzing](https://img.shields.io/badge/Phase%2004-Fuzzing%20%26%20Testing%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, and deterministic formal security-property verification.
+An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, and isolated protocol fuzzing.
 
 ---
 
@@ -20,24 +20,25 @@ The platform provides a unified system combining low-latency systems software wi
 4. **Versioned Network Digital Twin**: Immutable state graph tracking network changes, device states, and active routes.
 5. **Deterministic Security-Property Verification**: Formal invariant checking and automated counterexample generation.
 6. **Counterfactual Network Simulation**: Predictive "what-if" testing on digital twin snapshots prior to change execution.
-7. **Isolated Protocol Fuzzing & Differential Testing**: Deep parser verification and RFC compliance extraction.
+7. **Isolated Protocol Fuzzing & Differential Testing**: Deep parser verification, metamorphic testing, and automated delta minimization.
 8. **Constrained AI Investigation Agents**: Evidence-grounded agents with cryptographic proof linkages.
 9. **Learned Network World Model**: Evaluated against deterministic verification baselines.
 10. **Professional React Engineering Workstation**: High-density dark engineering visual shell and telemetry cockpit.
 
 ---
 
-## 2. Current Implementation Status (Phase 03 Operational)
+## 2. Current Implementation Status (Phase 04 Operational)
 
-Phase 03 establishes an executable, deterministic network digital twin and formal security verification engine:
+Phase 04 establishes a reproducible protocol security testing and differential fuzzing subsystem:
 
-- **Formal Executable Network Model**: Strongly typed `NetworkModel` constructed deterministically from versioned topology snapshots with canonical SHA-256 state fingerprinting, model limitations ledger, and isolated zone representations.
-- **Deterministic Forwarding Engine**: Discrete packet traversal simulation with Longest-Prefix-Match (LPM), metric tie-breaking, recursive next-hop resolution, forwarding loop detection, and directional first-match firewall ACL evaluation.
-- **Security Invariant Verification Engine**: Deterministic evaluator for all 7 invariant types (`ISOLATION`, `REQUIRED_REACHABILITY`, `PORT_RESTRICTION`, `CONFIGURATION_CONSISTENCY`, `SHADOWED_RULE`, `SEGMENTATION`, `LOOP_FREEDOM`) with counterexample witness paths.
-- **Counterfactual Simulation Engine**: Non-destructive what-if mutation engine operating on isolated deep-cloned models (`ADD_ROUTE`, `REMOVE_ROUTE`, `ADD_FIREWALL_RULE`, `REMOVE_FIREWALL_RULE`, `TOGGLE_INTERFACE_STATE`, etc.) producing comparative baseline-vs-counterfactual diff matrices.
-- **Simulation & Verification REST API**: Comprehensive REST endpoints under `/api/v1/models`, `/api/v1/simulations`, and `/api/v1/verification`.
-- **React Network Twin Workstation**: 9-module workstation featuring Asset Explorer, SVG Topology Graph, Auditable Evidence Inspector, Differential Snapshot Comparison, Reachability Workbench, Security Invariant Verification Engine, Counterfactual What-If Studio, Model Inspector with canonical SHA-256 fingerprints, and Configuration Ingestion.
-- **Full Automated Quality Gates**: 49 pytest tests, 13 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
+- **Protocol Test Generation & Mutation**: Deterministic generators and mutation operators for Ethernet, VLAN, IPv4, IPv6, TCP, UDP, DNS, HTTP/1.1, TLS ClientHello, and QUIC.
+- **Offline C++ Execution Harness**: Safe subprocess sandbox executing `protocol_engine.exe` with bounded timeouts, ASan and Windows crash code detection (`0xC0000005`, `0xC0000409`), Draft 2020-12 JSONL schema validation, and fault injection.
+- **Differential & Metamorphic Testing**: Equivalence testing across PCAP and PCAPNG encodings, metamorphic payload padding invariance, and port shift tests.
+- **Delta Debugging Minimizer & Bundler**: Automated payload minimizer trimming non-essential bytes while preserving crash/discrepancy signatures, plus export of self-contained reproduction ZIP bundles with PowerShell/Bash scripts.
+- **Persistent Evidence & Regression Ledger**: SQLite catalog with Schema Migration v3 storing test campaigns, cases, results, findings, and permanent regression fixtures.
+- **Security Testing REST API**: 15 endpoints under `/api/v1/testing` for campaign orchestration, test case inspection, defect triage, delta minimization, and bundle export.
+- **React Security Testing Workbench**: Interactive workstation (`SecurityTestingWorkbench.tsx`) accessible via dedicated "Protocol Research Lab" tab and Network Twin "Security Testing & Fuzzing" tab.
+- **Full Automated Quality Gates**: 109 pytest tests, 17 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
 
 See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
 

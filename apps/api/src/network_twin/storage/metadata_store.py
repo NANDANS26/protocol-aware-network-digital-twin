@@ -27,10 +27,17 @@ from network_twin.simulation.models import (
     SimulationScenario,
     VerificationResult,
 )
+from network_twin.testing.models import (
+    ExecutionResult,
+    Finding,
+    RegressionFixture,
+    TestCampaign,
+    TestCase,
+)
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class MetadataStore:
@@ -69,6 +76,8 @@ class MetadataStore:
                 self._migrate_to_v1(conn)
             if current_version < 2:
                 self._migrate_to_v2(conn)
+            if current_version < 3:
+                self._migrate_to_v3(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -309,6 +318,115 @@ class MetadataStore:
 
             INSERT INTO schema_migrations (version, applied_at, description)
             VALUES (2, datetime('now'), 'Phase 03: Executable Network Models, Scenarios, Invariants, and Results');
+            """
+        )
+        conn.commit()
+
+    def _migrate_to_v3(self, conn: sqlite3.Connection):
+        """Schema v3: Protocol Security Testing Campaigns, Cases, Findings, and Regressions."""
+        logger.info("Applying Metadata Store Schema Migration v3...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS test_campaigns (
+                campaign_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                protocol_targets_json TEXT NOT NULL,
+                strategies_json TEXT NOT NULL,
+                seed INTEGER NOT NULL,
+                max_cases_per_target INTEGER NOT NULL,
+                total_cases INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT,
+                cases_generated INTEGER NOT NULL DEFAULT 0,
+                cases_executed INTEGER NOT NULL DEFAULT 0,
+                passed_count INTEGER NOT NULL DEFAULT 0,
+                rejected_count INTEGER NOT NULL DEFAULT 0,
+                failed_count INTEGER NOT NULL DEFAULT 0,
+                findings_count INTEGER NOT NULL DEFAULT 0,
+                duration_ms REAL NOT NULL DEFAULT 0.0,
+                engine_version TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS test_cases (
+                case_id TEXT PRIMARY KEY,
+                campaign_id TEXT NOT NULL REFERENCES test_campaigns(campaign_id) ON DELETE CASCADE,
+                test_index INTEGER NOT NULL,
+                protocol_target TEXT NOT NULL,
+                generation_strategy TEXT NOT NULL,
+                mutation_sequence_json TEXT NOT NULL,
+                seed INTEGER NOT NULL,
+                generator_version TEXT NOT NULL,
+                fixture_format TEXT NOT NULL,
+                fixture_path TEXT NOT NULL,
+                fixture_hash TEXT NOT NULL,
+                expected_behavior TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS execution_results (
+                result_id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL REFERENCES test_cases(case_id) ON DELETE CASCADE,
+                exit_code INTEGER NOT NULL,
+                stdout TEXT NOT NULL,
+                stderr TEXT NOT NULL,
+                execution_time_ms REAL NOT NULL,
+                parser_status TEXT NOT NULL,
+                parsed_event_count INTEGER NOT NULL,
+                schema_valid INTEGER NOT NULL,
+                schema_errors_json TEXT NOT NULL,
+                anomalies_json TEXT NOT NULL,
+                sanitizer_triggered INTEGER NOT NULL,
+                crash_detected INTEGER NOT NULL,
+                passed INTEGER NOT NULL,
+                diagnostic TEXT,
+                executed_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS test_findings (
+                finding_id TEXT PRIMARY KEY,
+                campaign_id TEXT NOT NULL REFERENCES test_campaigns(campaign_id) ON DELETE CASCADE,
+                case_id TEXT NOT NULL REFERENCES test_cases(case_id) ON DELETE CASCADE,
+                protocol_target TEXT NOT NULL,
+                parser_component TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                confidence TEXT NOT NULL,
+                failure_category TEXT NOT NULL,
+                input_hash TEXT NOT NULL,
+                engine_version TEXT NOT NULL,
+                reproduction_command TEXT NOT NULL,
+                seed INTEGER NOT NULL,
+                mutation_sequence_json TEXT NOT NULL,
+                expected_behavior TEXT NOT NULL,
+                actual_behavior TEXT NOT NULL,
+                diagnostic TEXT NOT NULL,
+                status TEXT NOT NULL,
+                regression_fixture_id TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS regression_fixtures (
+                fixture_id TEXT PRIMARY KEY,
+                finding_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                protocol_target TEXT NOT NULL,
+                failure_category TEXT NOT NULL,
+                fixture_path TEXT NOT NULL,
+                fixture_hash TEXT NOT NULL,
+                engine_baseline_version TEXT NOT NULL,
+                expected_behavior TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_run_at TEXT,
+                last_run_passed INTEGER,
+                last_run_exit_code INTEGER,
+                last_run_diagnostic TEXT
+            );
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (3, datetime('now'), 'Phase 04: Protocol Security Testing, Campaigns, Cases, Findings, and Regressions');
             """
         )
         conn.commit()
@@ -1237,6 +1355,432 @@ class MetadataStore:
                 return None
             data = json.loads(row["results_json"])
             return [VerificationResult.model_validate(item) for item in data]
+
+    # --- Phase 04: Security Testing, Fuzzing & Regressions ---
+
+    def save_campaign(self, campaign: TestCampaign) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO test_campaigns (
+                    campaign_id, name, description, protocol_targets_json,
+                    strategies_json, seed, max_cases_per_target, total_cases,
+                    status, created_at, completed_at, cases_generated,
+                    cases_executed, passed_count, rejected_count, failed_count,
+                    findings_count, duration_ms, engine_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(campaign_id) DO UPDATE SET
+                    status=excluded.status,
+                    completed_at=excluded.completed_at,
+                    cases_executed=excluded.cases_executed,
+                    passed_count=excluded.passed_count,
+                    rejected_count=excluded.rejected_count,
+                    failed_count=excluded.failed_count,
+                    findings_count=excluded.findings_count,
+                    duration_ms=excluded.duration_ms;
+                """,
+                (
+                    campaign.campaign_id,
+                    campaign.name,
+                    campaign.description,
+                    json.dumps([t.value for t in campaign.protocol_targets]),
+                    json.dumps([s.value for s in campaign.strategies]),
+                    campaign.seed,
+                    campaign.max_cases_per_target,
+                    campaign.total_cases,
+                    campaign.status.value,
+                    campaign.created_at,
+                    campaign.completed_at,
+                    campaign.cases_generated,
+                    campaign.cases_executed,
+                    campaign.passed_count,
+                    campaign.rejected_count,
+                    campaign.failed_count,
+                    campaign.findings_count,
+                    campaign.duration_ms,
+                    campaign.engine_version,
+                ),
+            )
+            conn.commit()
+
+    def get_campaign(self, campaign_id: str) -> TestCampaign | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM test_campaigns WHERE campaign_id = ?;", (campaign_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            data["protocol_targets"] = json.loads(data["protocol_targets_json"])
+            data["strategies"] = json.loads(data["strategies_json"])
+            return TestCampaign.model_validate(data)
+
+    def list_campaigns(self) -> list[TestCampaign]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM test_campaigns ORDER BY created_at DESC;")
+            campaigns = []
+            for row in cur.fetchall():
+                data = dict(row)
+                data["protocol_targets"] = json.loads(data["protocol_targets_json"])
+                data["strategies"] = json.loads(data["strategies_json"])
+                campaigns.append(TestCampaign.model_validate(data))
+            return campaigns
+
+    def update_campaign_status(self, campaign_id: str, status: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE test_campaigns SET status = ? WHERE campaign_id = ?;",
+                (status if isinstance(status, str) else status.value, campaign_id),
+            )
+            conn.commit()
+
+    def update_campaign_summary(
+        self,
+        campaign_id: str,
+        status: str,
+        cases_executed: int,
+        passed_count: int,
+        rejected_count: int,
+        failed_count: int,
+        findings_count: int,
+        duration_ms: float,
+        completed_at: str,
+    ) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE test_campaigns SET
+                    status = ?,
+                    cases_executed = ?,
+                    passed_count = ?,
+                    rejected_count = ?,
+                    failed_count = ?,
+                    findings_count = ?,
+                    duration_ms = ?,
+                    completed_at = ?
+                WHERE campaign_id = ?;
+                """,
+                (
+                    status if isinstance(status, str) else status.value,
+                    cases_executed,
+                    passed_count,
+                    rejected_count,
+                    failed_count,
+                    findings_count,
+                    duration_ms,
+                    completed_at,
+                    campaign_id,
+                ),
+            )
+            conn.commit()
+
+    def save_test_cases(self, cases: list[TestCase]) -> None:
+        with self._get_connection() as conn:
+            for tc in cases:
+                conn.execute(
+                    """
+                    INSERT INTO test_cases (
+                        case_id, campaign_id, test_index, protocol_target,
+                        generation_strategy, mutation_sequence_json, seed,
+                        generator_version, fixture_format, fixture_path,
+                        fixture_hash, expected_behavior, status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(case_id) DO UPDATE SET
+                        status=excluded.status,
+                        fixture_path=excluded.fixture_path,
+                        fixture_hash=excluded.fixture_hash;
+                    """,
+                    (
+                        tc.case_id,
+                        tc.campaign_id,
+                        tc.test_index,
+                        tc.protocol_target.value,
+                        tc.generation_strategy.value,
+                        json.dumps([m.value if hasattr(m, "value") else m for m in tc.mutation_sequence]),
+                        tc.seed,
+                        tc.generator_version,
+                        tc.fixture_format,
+                        tc.fixture_path,
+                        tc.fixture_hash,
+                        tc.expected_behavior.value,
+                        tc.status.value,
+                        tc.created_at,
+                    ),
+                )
+            conn.commit()
+
+    def get_test_case(self, case_id: str) -> TestCase | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM test_cases WHERE case_id = ?;", (case_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            data["mutation_sequence"] = json.loads(data["mutation_sequence_json"])
+            return TestCase.model_validate(data)
+
+    def list_test_cases(
+        self,
+        campaign_id: str | None = None,
+        target: str | None = None,
+        status: str | None = None,
+    ) -> list[TestCase]:
+        query = "SELECT * FROM test_cases WHERE 1=1"
+        params: list[Any] = []
+        if campaign_id:
+            query += " AND campaign_id = ?"
+            params.append(campaign_id)
+        if target:
+            query += " AND protocol_target = ?"
+            params.append(target)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY test_index ASC;"
+
+        with self._get_connection() as conn:
+            cur = conn.execute(query, tuple(params))
+            cases = []
+            for row in cur.fetchall():
+                data = dict(row)
+                data["mutation_sequence"] = json.loads(data["mutation_sequence_json"])
+                cases.append(TestCase.model_validate(data))
+            return cases
+
+    def update_test_case_status(self, case_id: str, status: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE test_cases SET status = ? WHERE case_id = ?;",
+                (status if isinstance(status, str) else status.value, case_id),
+            )
+            conn.commit()
+
+    def save_execution_result(self, result: ExecutionResult) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO execution_results (
+                    result_id, case_id, exit_code, stdout, stderr,
+                    execution_time_ms, parser_status, parsed_event_count,
+                    schema_valid, schema_errors_json, anomalies_json,
+                    sanitizer_triggered, crash_detected, passed, diagnostic,
+                    executed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(result_id) DO UPDATE SET
+                    passed=excluded.passed;
+                """,
+                (
+                    result.result_id,
+                    result.case_id,
+                    result.exit_code,
+                    result.stdout,
+                    result.stderr,
+                    result.execution_time_ms,
+                    result.parser_status,
+                    result.parsed_event_count,
+                    1 if result.schema_valid else 0,
+                    json.dumps(result.schema_errors),
+                    json.dumps(result.anomalies_detected),
+                    1 if result.sanitizer_triggered else 0,
+                    1 if result.crash_detected else 0,
+                    1 if result.passed else 0,
+                    result.diagnostic,
+                    result.executed_at,
+                ),
+            )
+            conn.commit()
+
+    def get_execution_result(self, case_id: str) -> ExecutionResult | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM execution_results WHERE case_id = ? ORDER BY executed_at DESC LIMIT 1;", (case_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            data["schema_valid"] = bool(data["schema_valid"])
+            data["schema_errors"] = json.loads(data["schema_errors_json"])
+            data["anomalies_detected"] = json.loads(data["anomalies_json"])
+            data["sanitizer_triggered"] = bool(data["sanitizer_triggered"])
+            data["crash_detected"] = bool(data["crash_detected"])
+            data["passed"] = bool(data["passed"])
+            return ExecutionResult.model_validate(data)
+
+    def save_finding(self, finding: Finding) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO test_findings (
+                    finding_id, campaign_id, case_id, protocol_target,
+                    parser_component, severity, confidence, failure_category,
+                    input_hash, engine_version, reproduction_command, seed,
+                    mutation_sequence_json, expected_behavior, actual_behavior,
+                    diagnostic, status, regression_fixture_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(finding_id) DO UPDATE SET
+                    status=excluded.status,
+                    regression_fixture_id=excluded.regression_fixture_id;
+                """,
+                (
+                    finding.finding_id,
+                    finding.campaign_id,
+                    finding.case_id,
+                    finding.protocol_target.value,
+                    finding.parser_component.value,
+                    finding.severity.value,
+                    finding.confidence.value,
+                    finding.failure_category.value,
+                    finding.input_hash,
+                    finding.engine_version,
+                    finding.reproduction_command,
+                    finding.seed,
+                    json.dumps(finding.mutation_sequence),
+                    finding.expected_behavior,
+                    finding.actual_behavior,
+                    finding.diagnostic,
+                    finding.status.value,
+                    finding.regression_fixture_id,
+                    finding.created_at,
+                ),
+            )
+            conn.commit()
+
+    def get_finding(self, finding_id: str) -> Finding | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM test_findings WHERE finding_id = ?;", (finding_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            data["mutation_sequence"] = json.loads(data["mutation_sequence_json"])
+            return Finding.model_validate(data)
+
+    def list_findings(
+        self,
+        campaign_id: str | None = None,
+        severity: str | None = None,
+        protocol: str | None = None,
+        status: str | None = None,
+    ) -> list[Finding]:
+        query = "SELECT * FROM test_findings WHERE 1=1"
+        params: list[Any] = []
+        if campaign_id:
+            query += " AND campaign_id = ?"
+            params.append(campaign_id)
+        if severity:
+            query += " AND severity = ?"
+            params.append(severity)
+        if protocol:
+            query += " AND protocol_target = ?"
+            params.append(protocol)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY created_at DESC;"
+
+        with self._get_connection() as conn:
+            cur = conn.execute(query, tuple(params))
+            findings = []
+            for row in cur.fetchall():
+                data = dict(row)
+                data["mutation_sequence"] = json.loads(data["mutation_sequence_json"])
+                findings.append(Finding.model_validate(data))
+            return findings
+
+    def update_finding_status(self, finding_id: str, status: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE test_findings SET status = ? WHERE finding_id = ?;",
+                (status if isinstance(status, str) else status.value, finding_id),
+            )
+            conn.commit()
+
+    def update_finding_regression_id(self, finding_id: str, fixture_id: str) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE test_findings SET regression_fixture_id = ? WHERE finding_id = ?;",
+                (fixture_id, finding_id),
+            )
+            conn.commit()
+
+    def save_regression_fixture(self, fixture: RegressionFixture) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO regression_fixtures (
+                    fixture_id, finding_id, name, protocol_target,
+                    failure_category, fixture_path, fixture_hash,
+                    engine_baseline_version, expected_behavior, created_at,
+                    last_run_at, last_run_passed, last_run_exit_code,
+                    last_run_diagnostic
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(fixture_id) DO UPDATE SET
+                    name=excluded.name,
+                    last_run_at=excluded.last_run_at,
+                    last_run_passed=excluded.last_run_passed,
+                    last_run_exit_code=excluded.last_run_exit_code,
+                    last_run_diagnostic=excluded.last_run_diagnostic;
+                """,
+                (
+                    fixture.fixture_id,
+                    fixture.finding_id,
+                    fixture.name,
+                    fixture.protocol_target.value,
+                    fixture.failure_category.value,
+                    fixture.fixture_path,
+                    fixture.fixture_hash,
+                    fixture.engine_baseline_version,
+                    fixture.expected_behavior.value,
+                    fixture.created_at,
+                    fixture.last_run_at,
+                    1 if fixture.last_run_passed else (0 if fixture.last_run_passed is False else None),
+                    fixture.last_run_exit_code,
+                    fixture.last_run_diagnostic,
+                ),
+            )
+            conn.commit()
+
+    def get_regression_fixture(self, fixture_id: str) -> RegressionFixture | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM regression_fixtures WHERE fixture_id = ?;", (fixture_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            if data["last_run_passed"] is not None:
+                data["last_run_passed"] = bool(data["last_run_passed"])
+            return RegressionFixture.model_validate(data)
+
+    def list_regression_fixtures(self) -> list[RegressionFixture]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM regression_fixtures ORDER BY created_at DESC;")
+            fixtures = []
+            for row in cur.fetchall():
+                data = dict(row)
+                if data["last_run_passed"] is not None:
+                    data["last_run_passed"] = bool(data["last_run_passed"])
+                fixtures.append(RegressionFixture.model_validate(data))
+            return fixtures
+
+    def update_regression_run_status(
+        self,
+        fixture_id: str,
+        last_run_at: str,
+        passed: bool,
+        exit_code: int,
+        diagnostic: str | None,
+    ) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE regression_fixtures SET
+                    last_run_at = ?,
+                    last_run_passed = ?,
+                    last_run_exit_code = ?,
+                    last_run_diagnostic = ?
+                WHERE fixture_id = ?;
+                """,
+                (last_run_at, 1 if passed else 0, exit_code, diagnostic, fixture_id),
+            )
+            conn.commit()
 
 
 metadata_store = MetadataStore()

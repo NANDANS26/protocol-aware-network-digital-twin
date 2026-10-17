@@ -28,6 +28,7 @@ import { ReachabilityWorkbench } from './twin/ReachabilityWorkbench';
 import { SecurityVerificationView } from './twin/SecurityVerificationView';
 import { CounterfactualScenarioView } from './twin/CounterfactualScenarioView';
 import { ModelInspectorView } from './twin/ModelInspectorView';
+import { SecurityTestingWorkbench } from './twin/SecurityTestingWorkbench';
 import {
   Server,
   Network,
@@ -48,6 +49,7 @@ import {
   Cpu,
   Route,
   Activity,
+  Bug,
 } from 'lucide-react';
 
 export type TwinTab =
@@ -57,6 +59,7 @@ export type TwinTab =
   | 'verification'
   | 'counterfactual'
   | 'models'
+  | 'fuzzing'
   | 'evidence'
   | 'comparison'
   | 'imports';
@@ -441,11 +444,11 @@ export const NetworkTwinView: React.FC = () => {
               <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
                 Network Digital Twin
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-mono font-medium">
-                  Phase 03 Operational
+                  Phase 04 Operational
                 </span>
               </h1>
               <p className="text-xs text-gray-400 mt-0.5">
-                Executable network digital twin, deterministic reachability, security invariants & counterfactual simulation
+                Executable network digital twin, deterministic reachability, security verification & protocol fuzzing
               </p>
             </div>
           </div>
@@ -633,6 +636,18 @@ export const NetworkTwinView: React.FC = () => {
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
             {models.length}
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('fuzzing')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'fuzzing'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <Bug className="w-3.5 h-3.5 text-rose-400" />
+          <span>Security Testing & Fuzzing</span>
         </button>
 
         <button
@@ -1690,6 +1705,11 @@ export const NetworkTwinView: React.FC = () => {
           onBuildModel={handleBuildModel}
           loading={loading || actionLoading}
         />
+      )}
+
+      {/* TAB CONTENT: PROTOCOL SECURITY TESTING & FUZZING */}
+      {activeTab === 'fuzzing' && (
+        <SecurityTestingWorkbench />
       )}
 
       {/* Snapshot Creation Modal */}

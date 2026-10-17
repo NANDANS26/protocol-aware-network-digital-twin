@@ -7,6 +7,7 @@ from network_twin.routes.events import router as events_router
 from network_twin.routes.health import router as health_router
 from network_twin.routes.intelligence import router as intelligence_router
 from network_twin.routes.simulation import router as simulation_router
+from network_twin.routes.testing import router as testing_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -14,5 +15,6 @@ api_router.include_router(events_router)
 api_router.include_router(analysis_router)
 api_router.include_router(intelligence_router)
 api_router.include_router(simulation_router)
+api_router.include_router(testing_router)
 
 __all__ = ["api_router"]

@@ -355,6 +355,96 @@ export class NetworkTwinApiClient {
   async getVerificationResults(runId: string): Promise<import('../types/simulation').VerificationResult[]> {
     return this.request<import('../types/simulation').VerificationResult[]>(`/verification/runs/${runId}`);
   }
+
+  // --- Phase 04: Security Testing & Fuzzing ---
+
+  async createTestingCampaign(req: import('../types/testing').CampaignCreateRequest): Promise<import('../types/testing').TestCampaign> {
+    return this.request<import('../types/testing').TestCampaign>('/testing/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listTestingCampaigns(): Promise<import('../types/testing').TestCampaign[]> {
+    return this.request<import('../types/testing').TestCampaign[]>('/testing/campaigns');
+  }
+
+  async getTestingCampaign(campaignId: string): Promise<import('../types/testing').TestCampaign> {
+    return this.request<import('../types/testing').TestCampaign>(`/testing/campaigns/${campaignId}`);
+  }
+
+  async runTestingCampaign(campaignId: string): Promise<import('../types/testing').TestCampaign> {
+    return this.request<import('../types/testing').TestCampaign>(`/testing/campaigns/${campaignId}/run`, {
+      method: 'POST',
+    });
+  }
+
+  async listTestingCases(campaignId: string, params?: { target?: string; status?: string }): Promise<import('../types/testing').TestCase[]> {
+    const q = new URLSearchParams();
+    if (params?.target) q.set('target', params.target);
+    if (params?.status) q.set('status', params.status);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return this.request<import('../types/testing').TestCase[]>(`/testing/campaigns/${campaignId}/cases${qs}`);
+  }
+
+  async getTestCaseDetails(caseId: string): Promise<{ test_case: import('../types/testing').TestCase; execution_result: import('../types/testing').ExecutionResult | null }> {
+    return this.request<{ test_case: import('../types/testing').TestCase; execution_result: import('../types/testing').ExecutionResult | null }>(`/testing/cases/${caseId}`);
+  }
+
+  async rerunTestCase(caseId: string): Promise<import('../types/testing').ExecutionResult> {
+    return this.request<import('../types/testing').ExecutionResult>(`/testing/cases/${caseId}/rerun`, {
+      method: 'POST',
+    });
+  }
+
+  async listTestingFindings(filters?: { campaign_id?: string; severity?: string; protocol?: string; status?: string }): Promise<import('../types/testing').Finding[]> {
+    const q = new URLSearchParams();
+    if (filters?.campaign_id) q.set('campaign_id', filters.campaign_id);
+    if (filters?.severity) q.set('severity', filters.severity);
+    if (filters?.protocol) q.set('protocol', filters.protocol);
+    if (filters?.status) q.set('status', filters.status);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return this.request<import('../types/testing').Finding[]>(`/testing/findings${qs}`);
+  }
+
+  async getTestingFinding(findingId: string): Promise<import('../types/testing').Finding> {
+    return this.request<import('../types/testing').Finding>(`/testing/findings/${findingId}`);
+  }
+
+  async minimizeFinding(findingId: string): Promise<import('../types/testing').ReproductionArtifact> {
+    return this.request<import('../types/testing').ReproductionArtifact>(`/testing/findings/${findingId}/minimize`, {
+      method: 'POST',
+    });
+  }
+
+  async promoteFinding(findingId: string, name: string): Promise<import('../types/testing').RegressionFixture> {
+    return this.request<import('../types/testing').RegressionFixture>(`/testing/findings/${findingId}/promote`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async exportFindingBundle(findingId: string): Promise<Blob> {
+    const res = await fetch(`${this.baseUrl}/testing/findings/${findingId}/export`);
+    if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
+    return res.blob();
+  }
+
+  async listRegressionFixtures(): Promise<import('../types/testing').RegressionFixture[]> {
+    return this.request<import('../types/testing').RegressionFixture[]>('/testing/regressions');
+  }
+
+  async runRegressionFixture(fixtureId: string): Promise<import('../types/testing').RegressionRunResult> {
+    return this.request<import('../types/testing').RegressionRunResult>(`/testing/regressions/${fixtureId}/run`, {
+      method: 'POST',
+    });
+  }
+
+  async runQuickDifferential(): Promise<import('../types/testing').DifferentialResult> {
+    return this.request<import('../types/testing').DifferentialResult>('/testing/differential/quick-check', {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();
