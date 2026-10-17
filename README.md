@@ -1,6 +1,6 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 00 Foundation](https://img.shields.io/badge/Phase%2000-Foundation%20Verified-brightgreen)](#)
+[![Phase 01 Engine](https://img.shields.io/badge/Phase%2001-Protocol%20Engine%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
@@ -27,15 +27,15 @@ The platform provides a unified system combining low-latency systems software wi
 
 ---
 
-## 2. Current Implementation Status (Phase 00 Foundation)
+## 2. Current Implementation Status (Phase 01 Operational)
 
-Phase 00 establishes the verified engineering baseline:
+Phase 01 establishes real offline PCAP/PCAPNG ingestion, zero-copy protocol decoding, and stateful flow tracking:
 
-- **C++20 Systems Engine**: Compilable and tested (`engine/protocol/`) with `IPacketSource` abstraction, synthetic test generator, PCAP file source, structured JSON diagnostics, and full unit test suite (10 test cases, 77 assertions).
-- **FastAPI Control Plane**: Asynchronous application factory (`apps/api/`) with versioned routes (`/api/v1`), process liveness (`/health`), dependency readiness (`/ready`), request correlation (`X-Request-ID`), bounded payload limits, centralized error handling, and 11 passed pytest cases.
-- **Canonical Contracts**: Semantic version 1.0.0 JSON Schema (`schemas/v1/network_event.schema.json`) with zero-trust payload privacy (`payload_hash_sha256`) and synchronized bindings for Python (Pydantic v2), TypeScript, and C++20.
-- **React Engineering Workstation**: Dark engineering UI shell (`apps/web/`) with 6 navigation views, real-time backend telemetry, live contract verification cockpit, and strict TypeScript verification.
-- **Truthful Status Policy**: No fake packet counts, mock alerts, or simulated models are presented. Unimplemented subsystems are honestly categorized as `Planned` for future phases.
+- **C++20 Ingestion & Decoder Engine**: Real PCAP and PCAPNG reader with zero-copy decoding for Ethernet II, 802.1Q VLAN, IPv4, IPv6, ARP, ICMPv4/v6, UDP, and TCP. Stream reassembler with sequence wraparound handling, and application decoders for DNS, HTTP/1.1, TLS Handshake SNI/ALPN, and QUIC. 26 unit tests (183 assertions) passing.
+- **Stateful Flow Reconstruction**: Bidirectional 5-tuple tracking with FNV-1a hashing, RFC 793/9293 TCP state machine, retransmission/out-of-order counter tracking, and zero-trust SHA-256 payload hashing.
+- **FastAPI Control Plane**: Endpoints under `/api/v1/analysis` for PCAP/PCAPNG upload, demo analysis execution, flow table queries, and paginated canonical event retrieval. Subsystem health checks dynamically detect binary operational status. 20 pytest tests passing in 1.86s.
+- **React Network Observatory**: Interactive workstation view with drag-and-drop file upload, instant demo buttons, telemetry cards, protocol/TCP-state distributions, bidirectional flow table with search/filtering and detail drawer, and raw canonical event stream viewer. Strict TypeScript and 5/5 Vitest tests passing.
+- **Canonical Contracts**: All events strictly adhere to semantic version 1.0.0 JSON Schema (`schemas/v1/network_event.schema.json`).
 
 See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
 

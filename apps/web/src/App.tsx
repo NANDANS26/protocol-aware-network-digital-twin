@@ -4,6 +4,7 @@ import { apiClient, type ApiError } from './api/client';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './views/OverviewView';
+import { ObservatoryView } from './views/ObservatoryView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { NAVIGATION_TABS, type NavigationTab } from './types/navigation';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
@@ -96,6 +97,8 @@ export const App: React.FC = () => {
               readiness={readiness}
               onRefresh={fetchSystemStatus}
             />
+          ) : currentTab === 'observatory' ? (
+            <ObservatoryView />
           ) : (
             <PlaceholderView tab={activeTabDefinition} />
           )}

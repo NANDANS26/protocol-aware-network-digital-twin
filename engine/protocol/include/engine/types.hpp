@@ -5,6 +5,8 @@
 #include <vector>
 #include <chrono>
 
+#include "engine/capture_format.hpp"
+
 namespace engine {
 
 enum class StatusCode {
@@ -15,6 +17,8 @@ enum class StatusCode {
     EndOfFile,
     DeviceNotFound,
     PermissionDenied,
+    CorruptCaptureRecord,
+    UnsupportedLinkType,
     InternalError
 };
 
@@ -27,6 +31,8 @@ inline const char* to_string(StatusCode code) {
         case StatusCode::EndOfFile: return "EndOfFile";
         case StatusCode::DeviceNotFound: return "DeviceNotFound";
         case StatusCode::PermissionDenied: return "PermissionDenied";
+        case StatusCode::CorruptCaptureRecord: return "CorruptCaptureRecord";
+        case StatusCode::UnsupportedLinkType: return "UnsupportedLinkType";
         case StatusCode::InternalError: return "InternalError";
         default: return "Unknown";
     }
@@ -37,6 +43,8 @@ struct RawPacket {
     uint64_t timestamp_ns{0};
     uint32_t wire_length_bytes{0};
     uint32_t capture_length_bytes{0};
+    uint32_t interface_id{0};
+    LinkType link_type{LinkType::Ethernet};
     std::vector<uint8_t> data;
 };
 

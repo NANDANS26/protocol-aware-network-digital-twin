@@ -77,9 +77,12 @@ Makefile.cmake
 *.sln
 .vs/
 
-# Database / Analytical fixtures
+# Database / Analytical fixtures & runtime data
+data/
 *.pcap
 *.pcapng
+!tests/fixtures/*.pcap
+!tests/fixtures/*.pcapng
 *.duckdb
 *.parquet
 migrations/versions/*.pyc

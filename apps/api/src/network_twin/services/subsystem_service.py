@@ -22,6 +22,10 @@ class SubsystemService:
     def get_subsystems_report(self) -> dict[str, SubsystemReport]:
         now = datetime.now(UTC)
 
+        from network_twin.services.analysis_service import analysis_service
+
+        engine_ready = analysis_service.is_engine_available()
+
         # Honest, un-faked reporting of all system components
         reports: dict[str, SubsystemReport] = {
             "api_service": SubsystemReport(
@@ -31,15 +35,15 @@ class SubsystemService:
                 last_checked=now,
             ),
             "protocol_analysis_engine": SubsystemReport(
-                status=SubsystemState.PLANNED,
-                operational_state=OperationalState.PLANNED,
-                details="C++20 ingestion engine scheduled for full pipeline integration in Phase 01.",
+                status=SubsystemState.OK if engine_ready else SubsystemState.DEGRADED,
+                operational_state=OperationalState.OPERATIONAL if engine_ready else OperationalState.UNAVAILABLE,
+                details="C++20 ingestion engine built and operational (PCAP/PCAPNG, IPv4/v6, TCP/UDP, DNS/HTTP/TLS/QUIC)" if engine_ready else "C++ engine binary not compiled",
                 last_checked=now,
             ),
             "flow_tracker": SubsystemReport(
-                status=SubsystemState.PLANNED,
-                operational_state=OperationalState.PLANNED,
-                details="Bi-directional stateful flow tracking scheduled for Phase 01.",
+                status=SubsystemState.OK if engine_ready else SubsystemState.DEGRADED,
+                operational_state=OperationalState.OPERATIONAL if engine_ready else OperationalState.UNAVAILABLE,
+                details="Bi-directional stateful 5-tuple flow tracking and TCP RFC 793/9293 state machine active" if engine_ready else "C++ flow tracker not compiled",
                 last_checked=now,
             ),
             "network_digital_twin": SubsystemReport(

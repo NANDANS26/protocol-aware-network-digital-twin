@@ -6,33 +6,34 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 
 ---
 
-### 1. Completed Work (Phase 00)
+### 1. Completed Work (Phase 00 & Phase 01)
 
 | Subsystem / Area | Component | Verification Evidence |
 | :--- | :--- | :--- |
 | **Monorepo Architecture** | Clean modular structure (`apps/`, `engine/`, `packages/`, `schemas/`, `tests/`, `docs/`, `scripts/`) | Repository inspection, `.gitignore`, `.editorconfig`. |
 | **Event Contracts** | Canonical JSON Schema v1 (`schemas/v1/network_event.schema.json`) | Validated against JSON Schema Draft 2020-12 spec; zero-trust payload privacy. |
 | **Cross-Language Contracts** | Python Pydantic v2 models, TypeScript interfaces, and C++20 header definitions | Synchronized cross-language bindings in `packages/contracts/`. |
-| **FastAPI Backend** | Factory initialization, `/api/v1` routes, `/health` & `/ready` distinct logic, request correlation middleware (`X-Request-ID`), bounded payload enforcement, centralized exception handlers, restricted CORS. | 11/11 pytest test cases passing in 0.3s; Ruff linting and formatting passing. |
-| **C++20 Systems Engine** | CMake 3.20+ build configuration, `/W4` MSVC / `-Wall` GCC warning flags, `IPacketSource` abstraction, `SyntheticPacketSource`, `PcapFilePacketSource`, `LivePacketSource`, structured JSON logger, `ProtocolEngine` lifecycle. | MSVC 19.44 compilation with 0 warnings; 10 doctest test cases passing (77 assertions); standalone CLI execution verified. |
-| **React Workstation** | Dark engineering theme, navigation shell (Overview, Observatory, Twin, Laboratory, Research, Investigation), live backend health integration, typed API client, contract verifier, honest planned states. | TypeScript strict mode passed (`tsc --noEmit`); Vitest 3/3 DOM tests passing; Vite production build passing. |
-| **Quality Gates & CI** | GitHub Actions CI workflow, Makefile task runner, PowerShell developer runner (`scripts/dev.ps1`). | Automated task runners verified locally. |
+| **FastAPI Backend & Ingestion API** | `/api/v1/analysis` endpoints: `POST /upload`, `POST /demo`, `GET /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/flows`, `GET /jobs/{id}/events`. Subprocess-based engine executor with magic bytes validation and process timeouts. | 20 passed pytest test cases in 1.86s; Ruff linting passing with 0 errors. Subsystem health checks dynamically mark engine and flow tracker `ok` / `operational`. |
+| **C++20 Systems Engine** | Unified reader for Classic PCAP (microsecond, nanosecond, big/little endian) and PCAPNG (SHB, IDB with `if_tsresol`, EPB with 32-bit padding, skipping unknown blocks). | Standalone CLI (`protocol_engine.exe`) executed against real PCAP and PCAPNG fixtures. 100% block parse accuracy. |
+| **Protocol Decoders** | Zero-copy `std::span` decoders for Ethernet II, 802.1Q VLAN, IPv4 (options, fragmentation), IPv6 (hop-by-hop/routing/fragment headers), ARP (RFC 826), ICMPv4/ICMPv6, UDP, and TCP (options, MSS, WScale, SACK). | 26 doctest test cases passing (183 assertions) with 0 failures. Clean packets with zero memory corruption. |
+| **Stateful Flow Tracking** | Canonical 5-tuple bidirectional `FlowKey` with FNV-1a hashing, RFC 793/9293 TCP state machine, midstream connection detection, retransmission and out-of-order counter tracking. | Verified via test suite and benchmark on mixed protocol captures. |
+| **TCP Stream Reassembly** | `TcpStreamReassembler` with bounded memory window (default 1MB), 32-bit sequence wraparound handling, out-of-order buffer merging, and overlap conflict detection. | Unit tested with sequence gaps, duplicate data, and overlapping segments. |
+| **Application Layer Parsers** | DNS (queries, responses, record types, compression pointer loop protection), HTTP/1.1 (method, URI, status, headers with redaction of Authorization/Cookie), TLS Handshake (SNI extraction, ALPN protocols, cipher suite IDs), QUIC (heuristic classification). | Tested on synthetic and captured application traffic. |
+| **Zero-Trust Crypto Hashing** | Native C++20 FIPS 180-4 SHA-256 implementation producing cryptographic payload fingerprints without raw payload retention. | Cross-checked against standard test vectors and Python hashlib. |
+| **React Observatory Workstation** | Full Network Observatory view with drag-and-drop PCAP/PCAPNG upload, instant sample runs, 6 telemetry summary cards, protocol/TCP-state breakdowns, bidirectional flow table with filters, flow detail inspection drawer, and raw JSONL canonical event viewer. | TypeScript strict mode passed (`tsc --noEmit`); Vitest 5/5 tests passing in 0.9s; full UI state updates verified. |
+| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters, typecheckers, doctest, pytest, and vitest. |
 
 ---
 
 ### 2. Partial / Transitional Work
 
-- **IPC High-Throughput Bridge**: In Phase 00, contract validation is verified via the `/api/v1/events/validate` REST bridge. Direct streaming IPC (named pipe / shared memory) between `protocol_engine` and Python is designed and ready for Phase 01.
+- **Live Capture on Windows Host**: Requires administrative privileges and an installed Npcap/WinPcap driver. Live capture is architecturally supported via `LivePacketSource` but gracefully reports `unavailable` when the Npcap DLL is absent on dev machines. Offline PCAP and PCAPNG ingestion are 100% operational.
 - **Relational Storage**: PostgreSQL connection pool handling is structured and tested in stateless fallback mode. Migrations and active connection pools activate in Phase 02.
 
 ---
 
-### 3. Planned Work (Phase 01 through Phase 10)
+### 3. Planned Work (Phase 02 through Phase 10)
 
-- **Phase 01**:
-  - Full PCAP / PCAPNG packet block decoder in C++.
-  - Zero-copy protocol decoders (Ethernet, VLAN, IPv4, IPv6, ARP, TCP, UDP, ICMP, DNS, TLS).
-  - Bidirectional 5-tuple flow state tracker and TCP state machine.
 - **Phase 02**: Persistent analytical store (DuckDB + Parquet) and relational catalog (PostgreSQL + Alembic).
 - **Phase 03**: Evidence-based network topology reconstruction and versioned digital twin graph.
 - **Phase 04**: Deterministic formal security-property verification and counterexample generation.

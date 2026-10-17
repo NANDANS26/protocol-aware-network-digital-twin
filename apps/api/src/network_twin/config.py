@@ -40,12 +40,14 @@ class AppSettings(BaseSettings):
     database_url: str | None = None
     require_database: bool = False
 
-    # Engine connection settings (Optional in Phase 00)
+    # Engine connection and execution settings
     engine_socket_path: str | None = None
+    engine_binary_path: str | None = None
     require_engine: bool = False
+    data_dir: str = "data"
 
     # Security limits
-    max_request_body_bytes: int = 10 * 1024 * 1024  # 10 MB limit
+    max_request_body_bytes: int = 50 * 1024 * 1024  # 50 MB limit for PCAP uploads
 
 
 settings = AppSettings()

@@ -26,7 +26,7 @@ export const NAVIGATION_TABS: TabDefinition[] = [
     id: 'observatory',
     label: 'Network Observatory',
     phase: 'Phase 01',
-    isImplemented: false,
+    isImplemented: true,
     description: 'High-throughput packet capture, C++ decoder pipeline, and protocol-aware flow stream.',
   },
   {

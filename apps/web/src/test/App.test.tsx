@@ -100,9 +100,18 @@ describe('Application Shell & Navigation', () => {
       expect(screen.getByText(/API Live \(0\.1\.0\)/i)).toBeInTheDocument();
     });
 
-    // Click on Network Observatory tab
+    // Click on Network Observatory tab -> renders real Phase 01 view
     const observatoryBtn = screen.getByRole('button', { name: /Network Observatory/i });
     fireEvent.click(observatoryBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/High-throughput offline capture ingestion/i)).toBeInTheDocument();
+      expect(screen.getByText(/Upload PCAP \/ PCAPNG/i)).toBeInTheDocument();
+    });
+
+    // Click on Network Twin tab (Phase 03) -> renders planned placeholder view truthfully
+    const twinBtn = screen.getByRole('button', { name: /Network Twin/i });
+    fireEvent.click(twinBtn);
 
     await waitFor(() => {
       expect(screen.getByTestId('placeholder-view')).toBeInTheDocument();

@@ -122,6 +122,51 @@ export class NetworkTwinApiClient {
       body: JSON.stringify(event),
     });
   }
+
+  async uploadCapture(file: File): Promise<import('../types/analysis').JobUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request<import('../types/analysis').JobUploadResponse>('/analysis/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async runDemoAnalysis(format: 'pcap' | 'pcapng' = 'pcap'): Promise<import('../types/analysis').JobUploadResponse> {
+    return this.request<import('../types/analysis').JobUploadResponse>(`/analysis/demo?format=${format}`, {
+      method: 'POST',
+    });
+  }
+
+  async listJobs(): Promise<import('../types/analysis').AnalysisJob[]> {
+    return this.request<import('../types/analysis').AnalysisJob[]>('/analysis/jobs');
+  }
+
+  async getJob(jobId: string): Promise<import('../types/analysis').AnalysisJob> {
+    return this.request<import('../types/analysis').AnalysisJob>(`/analysis/jobs/${jobId}`);
+  }
+
+  async getJobFlows(
+    jobId: string,
+    ipProto?: string,
+    offset = 0,
+    limit = 100
+  ): Promise<import('../types/analysis').FlowListResponse> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (ipProto) query.set('ip_proto', ipProto);
+    return this.request<import('../types/analysis').FlowListResponse>(`/analysis/jobs/${jobId}/flows?${query.toString()}`);
+  }
+
+  async getJobEvents(
+    jobId: string,
+    offset = 0,
+    limit = 100,
+    status?: string
+  ): Promise<import('../types/analysis').EventListResponse> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    if (status) query.set('status', status);
+    return this.request<import('../types/analysis').EventListResponse>(`/analysis/jobs/${jobId}/events?${query.toString()}`);
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(protocol_engine VERSION 0.1.0 LANGUAGES CXX)
+project(protocol_engine VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,8 +36,27 @@ endif()
 add_library(protocol_engine_core STATIC
     src/config.cpp
     src/logger.cpp
+    src/capture_reader.cpp
     src/packet_source.cpp
     src/engine.cpp
+    src/decoders/decoder_types.cpp
+    src/decoders/ethernet_decoder.cpp
+    src/decoders/ipv4_decoder.cpp
+    src/decoders/ipv6_decoder.cpp
+    src/decoders/arp_decoder.cpp
+    src/decoders/icmp_decoder.cpp
+    src/decoders/tcp_decoder.cpp
+    src/decoders/udp_decoder.cpp
+    src/flow/flow_key.cpp
+    src/flow/tcp_state_tracker.cpp
+    src/flow/flow_table.cpp
+    src/reassembly/tcp_stream_reassembler.cpp
+    src/protocols/dns_parser.cpp
+    src/protocols/http_parser.cpp
+    src/protocols/tls_parser.cpp
+    src/protocols/quic_classifier.cpp
+    src/crypto/sha256.cpp
+    src/analysis_pipeline.cpp
 )
 
 target_include_directories(protocol_engine_core PUBLIC

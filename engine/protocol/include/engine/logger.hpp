@@ -47,9 +47,9 @@ private:
     std::mutex log_mutex_;
 };
 
-#define LOG_DEBUG(subsystem, msg) engine::Logger::instance().log(engine::LogLevel::Debug, subsystem, msg)
-#define LOG_INFO(subsystem, msg) engine::Logger::instance().log(engine::LogLevel::Info, subsystem, msg)
-#define LOG_WARN(subsystem, msg) engine::Logger::instance().log(engine::LogLevel::Warning, subsystem, msg)
-#define LOG_ERROR(subsystem, msg) engine::Logger::instance().log(engine::LogLevel::Error, subsystem, msg)
+#define LOG_DEBUG(subsystem, msg) ::engine::Logger::instance().log(::engine::LogLevel::Debug, subsystem, msg)
+#define LOG_INFO(subsystem, msg) ::engine::Logger::instance().log(::engine::LogLevel::Info, subsystem, msg)
+#define LOG_WARN(subsystem, msg) ::engine::Logger::instance().log(::engine::LogLevel::Warning, subsystem, msg)
+#define LOG_ERROR(subsystem, msg) ::engine::Logger::instance().log(::engine::LogLevel::Error, subsystem, msg)
 
 } // namespace engine

@@ -39,10 +39,12 @@ private:
     PacketSourceStats stats_;
 };
 
+class CaptureReader;
+
 class PcapFilePacketSource : public IPacketSource {
 public:
     explicit PcapFilePacketSource(std::string file_path);
-    ~PcapFilePacketSource() override = default;
+    ~PcapFilePacketSource() override;
 
     [[nodiscard]] StatusCode open(std::string& error_msg) override;
     [[nodiscard]] StatusCode read_next_packet(RawPacket& out_packet) override;
@@ -53,10 +55,7 @@ public:
 
 private:
     std::string file_path_;
-    bool is_open_{false};
-    bool is_eof_{false};
-    uint64_t packet_index_{0};
-    PacketSourceStats stats_;
+    std::unique_ptr<CaptureReader> reader_;
 };
 
 class LivePacketSource : public IPacketSource {

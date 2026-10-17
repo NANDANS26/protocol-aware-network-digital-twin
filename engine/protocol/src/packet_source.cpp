@@ -1,4 +1,5 @@
 #include "engine/packet_source.hpp"
+#include "engine/capture_reader.hpp"
 #include "engine/logger.hpp"
 #include <fstream>
 #include <chrono>
@@ -88,73 +89,44 @@ PacketSourceStats SyntheticPacketSource::get_stats() const {
 // -------------------------------------------------------------------------
 
 PcapFilePacketSource::PcapFilePacketSource(std::string file_path)
-    : file_path_(std::move(file_path)) {}
+    : file_path_(std::move(file_path)), reader_(std::make_unique<CaptureReader>()) {}
+
+PcapFilePacketSource::~PcapFilePacketSource() = default;
 
 StatusCode PcapFilePacketSource::open(std::string& error_msg) {
-    std::ifstream file(file_path_, std::ios::binary);
-    if (!file.is_open()) {
-        error_msg = "Failed to open PCAP file at path: " + file_path_;
-        return StatusCode::SourceOpenFailed;
+    if (!reader_) {
+        reader_ = std::make_unique<CaptureReader>();
     }
-
-    // Read 24-byte PCAP global header
-    uint32_t magic = 0;
-    file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    if (file.gcount() < 4) {
-        error_msg = "PCAP file is too small to contain a valid header: " + file_path_;
-        return StatusCode::ReadError;
-    }
-
-    // Check PCAP magic (0xa1b2c3d4 microsecond, 0xa1b23c4d nanosecond, or byte-swapped)
-    if (magic != 0xa1b2c3d4 && magic != 0xd4c3b2a1 &&
-        magic != 0xa1b23c4d && magic != 0x4d3cb2a1) {
-        error_msg = "File does not have a recognized PCAP magic number: " + file_path_;
-        return StatusCode::SourceOpenFailed;
-    }
-
-    is_open_ = true;
-    is_eof_ = false;
-    packet_index_ = 0;
-    stats_ = {};
-    error_msg.clear();
-    LOG_INFO("PacketSource", "PCAP file source opened successfully: " + file_path_);
-    return StatusCode::Success;
+    return reader_->open(file_path_, error_msg);
 }
 
-StatusCode PcapFilePacketSource::read_next_packet(RawPacket& /* out_packet */) {
-    if (!is_open_) {
+StatusCode PcapFilePacketSource::read_next_packet(RawPacket& out_packet) {
+    if (!reader_ || !reader_->is_open()) {
         return StatusCode::ReadError;
     }
-    if (is_eof_) {
-        return StatusCode::EndOfFile;
-    }
-
-    std::ifstream file(file_path_, std::ios::binary);
-    if (!file.is_open()) {
-        return StatusCode::ReadError;
-    }
-
-    // Seek to current packet position (24-byte global header + offset of read packets)
-    // For Phase 00 foundation, we keep track of reading or simulate packet stream
-    is_eof_ = true; // Signals completion of single-pass inspection
-    return StatusCode::EndOfFile;
+    return reader_->read_next_packet(out_packet);
 }
 
 void PcapFilePacketSource::close() {
-    is_open_ = false;
+    if (reader_) {
+        reader_->close();
+    }
     LOG_INFO("PacketSource", "PCAP file source closed: " + file_path_);
 }
 
 bool PcapFilePacketSource::is_open() const {
-    return is_open_;
+    return reader_ && reader_->is_open();
 }
 
 bool PcapFilePacketSource::is_eof() const {
-    return is_eof_;
+    return reader_ && reader_->is_eof();
 }
 
 PacketSourceStats PcapFilePacketSource::get_stats() const {
-    return stats_;
+    if (reader_) {
+        return reader_->get_stats();
+    }
+    return {};
 }
 
 // -------------------------------------------------------------------------
