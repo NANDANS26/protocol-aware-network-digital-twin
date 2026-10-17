@@ -26,6 +26,7 @@ MAX_IMPORT_BYTES = 10 * 1024 * 1024  # 10 MB maximum configuration input size
 
 class ConfigurationImportError(Exception):
     """Raised when an imported configuration is invalid or malformed."""
+
     pass
 
 
@@ -36,14 +37,18 @@ class BaseImporter:
         self.source_name = source_name
         self.import_id = f"import-{uuid.uuid4().hex[:12]}"
 
-    def parse(self, raw_content: str) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
+    def parse(
+        self, raw_content: str
+    ) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
         raise NotImplementedError
 
 
 class RoutingTableImporter(BaseImporter):
     """Parses IPv4/IPv6 routing table exports in JSON or CSV format."""
 
-    def parse(self, raw_content: str) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
+    def parse(
+        self, raw_content: str
+    ) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
         if len(raw_content.encode("utf-8")) > MAX_IMPORT_BYTES:
             raise ConfigurationImportError("Configuration file exceeds 10 MB limit.")
 
@@ -63,11 +68,11 @@ class RoutingTableImporter(BaseImporter):
             metric = row.get("metric", "1")
 
             if not dest:
-                errors.append(f"Row {i+1}: Missing required 'destination' or 'prefix'")
+                errors.append(f"Row {i + 1}: Missing required 'destination' or 'prefix'")
                 continue
 
             valid_count += 1
-            ev_id = f"ev-route-{self.import_id}-{i+1}"
+            ev_id = f"ev-route-{self.import_id}-{i + 1}"
             ev = EvidenceRecord(
                 evidence_id=ev_id,
                 evidence_type=EvidenceType.IMPORTED_ROUTING,
@@ -79,7 +84,7 @@ class RoutingTableImporter(BaseImporter):
                 dst_ref=next_hop,
                 parser_status="ok",
                 confidence=1.0,
-                provenance=f"Routing table import '{self.source_name}' (row {i+1})",
+                provenance=f"Routing table import '{self.source_name}' (row {i + 1})",
                 details={
                     "destination": dest,
                     "next_hop": next_hop,
@@ -111,7 +116,7 @@ class RoutingTableImporter(BaseImporter):
                 nodes.append(gw_node)
 
                 edge = TopologyEdge(
-                    edge_id=f"edge-route-{self.import_id}-{i+1}",
+                    edge_id=f"edge-route-{self.import_id}-{i + 1}",
                     source_node_id=gw_node_id,
                     target_node_id=dest_node_id,
                     edge_type=TopologyEdgeType.CONFIGURED_ROUTE,
@@ -158,7 +163,9 @@ class RoutingTableImporter(BaseImporter):
 class NeighborTableImporter(BaseImporter):
     """Parses ARP / NDP neighbor tables in JSON or CSV format."""
 
-    def parse(self, raw_content: str) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
+    def parse(
+        self, raw_content: str
+    ) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
         if len(raw_content.encode("utf-8")) > MAX_IMPORT_BYTES:
             raise ConfigurationImportError("Configuration file exceeds 10 MB limit.")
 
@@ -177,11 +184,11 @@ class NeighborTableImporter(BaseImporter):
             interface = row.get("interface") or row.get("dev")
 
             if not ip_str or not mac_str:
-                errors.append(f"Row {i+1}: Missing required 'ip' or 'mac'")
+                errors.append(f"Row {i + 1}: Missing required 'ip' or 'mac'")
                 continue
 
             valid_count += 1
-            ev_id = f"ev-neighbor-{self.import_id}-{i+1}"
+            ev_id = f"ev-neighbor-{self.import_id}-{i + 1}"
             ev = EvidenceRecord(
                 evidence_id=ev_id,
                 evidence_type=EvidenceType.IMPORTED_NEIGHBOR,
@@ -193,7 +200,7 @@ class NeighborTableImporter(BaseImporter):
                 dst_ref=mac_str,
                 parser_status="ok",
                 confidence=1.0,
-                provenance=f"ARP/Neighbor import '{self.source_name}' (row {i+1})",
+                provenance=f"ARP/Neighbor import '{self.source_name}' (row {i + 1})",
                 details={"ip": ip_str, "mac": mac_str, "interface": interface},
             )
             evidence_list.append(ev)
@@ -241,7 +248,9 @@ class NeighborTableImporter(BaseImporter):
 class DeviceInventoryImporter(BaseImporter):
     """Parses device and asset inventories (hostname, IPs, MACs, role) in JSON/CSV."""
 
-    def parse(self, raw_content: str) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
+    def parse(
+        self, raw_content: str
+    ) -> tuple[ConfigImportResult, list[EvidenceRecord], list[TopologyNode], list[TopologyEdge]]:
         if len(raw_content.encode("utf-8")) > MAX_IMPORT_BYTES:
             raise ConfigurationImportError("Configuration file exceeds 10 MB limit.")
 
@@ -261,12 +270,12 @@ class DeviceInventoryImporter(BaseImporter):
             role = row.get("role", "server")
 
             if not ip_str and not hostname:
-                errors.append(f"Row {i+1}: Missing both 'ip' and 'hostname'")
+                errors.append(f"Row {i + 1}: Missing both 'ip' and 'hostname'")
                 continue
 
             primary_ip = ip_str or "0.0.0.0"
             valid_count += 1
-            ev_id = f"ev-inventory-{self.import_id}-{i+1}"
+            ev_id = f"ev-inventory-{self.import_id}-{i + 1}"
             ev = EvidenceRecord(
                 evidence_id=ev_id,
                 evidence_type=EvidenceType.IMPORTED_CONFIGURATION,
@@ -278,13 +287,17 @@ class DeviceInventoryImporter(BaseImporter):
                 dst_ref=hostname,
                 parser_status="ok",
                 confidence=1.0,
-                provenance=f"Inventory import '{self.source_name}' (row {i+1})",
+                provenance=f"Inventory import '{self.source_name}' (row {i + 1})",
                 details={"hostname": hostname, "ip": primary_ip, "mac": mac_str, "role": role},
             )
             evidence_list.append(ev)
 
-            node_id = f"asset-inv-{self.import_id}-{i+1}"
-            node_type = TopologyNodeType.ROUTER if role.lower() in ("router", "gateway", "firewall", "switch") else TopologyNodeType.ASSET
+            node_id = f"asset-inv-{self.import_id}-{i + 1}"
+            node_type = (
+                TopologyNodeType.ROUTER
+                if role.lower() in ("router", "gateway", "firewall", "switch")
+                else TopologyNodeType.ASSET
+            )
             node = TopologyNode(
                 node_id=node_id,
                 node_type=node_type,

@@ -445,8 +445,79 @@ export class NetworkTwinApiClient {
       method: 'POST',
     });
   }
+
+  // --- Phase 05: Stateful Protocol Sequence Testing ---
+
+  async listProtocolSequences(sequenceType?: string): Promise<import('../types/sequences').ProtocolSequence[]> {
+    const qs = sequenceType ? `?sequence_type=${encodeURIComponent(sequenceType)}` : '';
+    return this.request<import('../types/sequences').ProtocolSequence[]>(`/sequences${qs}`);
+  }
+
+  async getProtocolSequence(sequenceId: string): Promise<import('../types/sequences').ProtocolSequence> {
+    return this.request<import('../types/sequences').ProtocolSequence>(`/sequences/${sequenceId}`);
+  }
+
+  async generateSequenceSuite(seed: number = 42): Promise<import('../types/sequences').ProtocolSequence[]> {
+    return this.request<import('../types/sequences').ProtocolSequence[]>('/sequences/generate-suite', {
+      method: 'POST',
+      body: JSON.stringify({ seed }),
+    });
+  }
+
+  async runProtocolSequence(sequenceId: string): Promise<{ execution: import('../types/sequences').SequenceExecutionResult; findings: import('../types/sequences').SequenceFinding[] }> {
+    return this.request<{ execution: import('../types/sequences').SequenceExecutionResult; findings: import('../types/sequences').SequenceFinding[] }>(`/sequences/${sequenceId}/run`, {
+      method: 'POST',
+    });
+  }
+
+  async mutateProtocolSequence(sequenceId: string, mutations: import('../types/sequences').SequenceMutation[]): Promise<import('../types/sequences').ProtocolSequence> {
+    return this.request<import('../types/sequences').ProtocolSequence>(`/sequences/${sequenceId}/mutate`, {
+      method: 'POST',
+      body: JSON.stringify({ mutations }),
+    });
+  }
+
+  async runSequenceDifferential(req: { sequence_id?: string; mode?: string } = {}): Promise<import('../types/sequences').SequenceDifferentialResult> {
+    return this.request<import('../types/sequences').SequenceDifferentialResult>('/sequences/differential', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listSequenceFindings(sequenceId?: string): Promise<import('../types/sequences').SequenceFinding[]> {
+    const qs = sequenceId ? `?sequence_id=${encodeURIComponent(sequenceId)}` : '';
+    return this.request<import('../types/sequences').SequenceFinding[]>(`/sequences/findings${qs}`);
+  }
+
+  async minimizeSequenceFinding(findingId: string): Promise<import('../types/sequences').SequenceReproductionMetadata> {
+    return this.request<import('../types/sequences').SequenceReproductionMetadata>(`/sequences/findings/${findingId}/minimize`, {
+      method: 'POST',
+    });
+  }
+
+  async promoteSequenceRegression(findingId: string, name: string): Promise<import('../types/sequences').SequenceRegressionFixture> {
+    return this.request<import('../types/sequences').SequenceRegressionFixture>(`/sequences/findings/${findingId}/promote-regression`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async listSequenceRegressions(): Promise<import('../types/sequences').SequenceRegressionFixture[]> {
+    return this.request<import('../types/sequences').SequenceRegressionFixture[]>('/sequences/regressions');
+  }
+
+  async getCoverageGaps(): Promise<import('../types/sequences').CoverageGapsResponse> {
+    return this.request<import('../types/sequences').CoverageGapsResponse>('/sequences/coverage-gaps');
+  }
+
+  async exportSequenceBundle(findingId: string): Promise<Blob> {
+    const res = await fetch(`${this.baseUrl}/sequences/findings/${findingId}/bundle`);
+    if (!res.ok) throw new Error(`Sequence bundle download failed: ${res.statusText}`);
+    return res.blob();
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();
+
 
 

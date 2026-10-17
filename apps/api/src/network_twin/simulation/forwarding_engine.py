@@ -77,9 +77,7 @@ class ForwardingEngine:
                     destination_port=query.destination_port,
                     status=ReachabilityStatus.INDETERMINATE,
                     reason_code=ReasonCode.SOURCE_UNKNOWN,
-                    explanation=(
-                        f"Source IP {query.source_ip} does not belong to any modeled interface or subnet."
-                    ),
+                    explanation=(f"Source IP {query.source_ip} does not belong to any modeled interface or subnet."),
                     limitations=["Source host not mapped in digital twin model"],
                 )
             source_node = source_subnet_node
@@ -304,9 +302,7 @@ class ForwardingEngine:
                     path=path,
                     evaluated_policy_count=policy_eval_count,
                     route_decisions_count=route_decision_count,
-                    explanation=(
-                        f"No route to destination {query.destination_ip} on node '{current_node.label}'."
-                    ),
+                    explanation=(f"No route to destination {query.destination_ip} on node '{current_node.label}'."),
                     evidence_ids=sorted(list(evidence_ids)),
                 )
 
@@ -391,9 +387,7 @@ class ForwardingEngine:
                     status=ReachabilityStatus.BLOCKED,
                     reason_code=ReasonCode.UNRESOLVED_NEXT_HOP,
                     path=path,
-                    explanation=(
-                        f"Unresolved next hop {selected_route.next_hop_ip} on node '{current_node.label}'."
-                    ),
+                    explanation=(f"Unresolved next hop {selected_route.next_hop_ip} on node '{current_node.label}'."),
                     evidence_ids=sorted(list(evidence_ids)),
                 )
 
@@ -429,7 +423,9 @@ class ForwardingEngine:
             evidence_ids=sorted(list(evidence_ids)),
         )
 
-    def _lookup_route(self, node: ModelNode, dst_addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> RouteEntry | None:
+    def _lookup_route(
+        self, node: ModelNode, dst_addr: ipaddress.IPv4Address | ipaddress.IPv6Address
+    ) -> RouteEntry | None:
         """Finds longest-prefix-match route on node."""
         matching_routes: list[RouteEntry] = []
 
@@ -451,9 +447,7 @@ class ForwardingEngine:
         # 2. Administrative distance ascending
         # 3. Metric ascending
         # 4. Route ID ascending (deterministic tie-breaker)
-        matching_routes.sort(
-            key=lambda r: (-r.prefix_length, r.admin_distance, r.metric, r.route_id)
-        )
+        matching_routes.sort(key=lambda r: (-r.prefix_length, r.admin_distance, r.metric, r.route_id))
         return matching_routes[0]
 
     def _evaluate_acls(
@@ -472,9 +466,7 @@ class ForwardingEngine:
         for acl in node.acls:
             # If the ACL defines rules, it only filters directions it specifies
             if acl.rules:
-                directional_rules = [
-                    r for r in acl.rules if r.direction in (direction, RuleDirection.BOTH)
-                ]
+                directional_rules = [r for r in acl.rules if r.direction in (direction, RuleDirection.BOTH)]
                 if not directional_rules:
                     continue
             else:

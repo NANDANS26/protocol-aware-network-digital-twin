@@ -68,7 +68,12 @@ class SnapshotManager:
         )
 
         self.store.save_snapshot(snapshot, graph)
-        logger.info("Created and persisted topology snapshot %s with %d nodes and %d edges", snapshot_id, graph.node_count, graph.edge_count)
+        logger.info(
+            "Created and persisted topology snapshot %s with %d nodes and %d edges",
+            snapshot_id,
+            graph.node_count,
+            graph.edge_count,
+        )
         return snapshot, graph
 
     def compare_snapshots(self, base_snapshot_id: str, target_snapshot_id: str) -> SnapshotComparisonDiff:
@@ -131,20 +136,24 @@ class SnapshotManager:
             else:
                 desc = f"Inferred relationship established: {edge.edge_type.value}"
 
-            explanations.append({
-                "type": "added_relationship",
-                "edge_id": edge.edge_id,
-                "evidence_class": edge.evidence_class.value,
-                "explanation": desc,
-                "evidence_ids": edge.evidence_ids,
-            })
+            explanations.append(
+                {
+                    "type": "added_relationship",
+                    "edge_id": edge.edge_id,
+                    "evidence_class": edge.evidence_class.value,
+                    "explanation": desc,
+                    "evidence_ids": edge.evidence_ids,
+                }
+            )
 
         for node in added_nodes:
-            explanations.append({
-                "type": "added_entity",
-                "node_id": node.node_id,
-                "explanation": f"Newly discovered {node.node_type.value}: {node.label}",
-            })
+            explanations.append(
+                {
+                    "type": "added_entity",
+                    "node_id": node.node_id,
+                    "explanation": f"Newly discovered {node.node_type.value}: {node.label}",
+                }
+            )
 
         return SnapshotComparisonDiff(
             base_snapshot_id=base_snapshot_id,

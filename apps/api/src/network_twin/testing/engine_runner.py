@@ -76,7 +76,7 @@ class EngineRunner:
     ) -> ExecutionResult:
         """Executes the C++ protocol analyzer against a fixture safely and deterministically."""
         p_fixture = Path(fixture_path).resolve()
-        result_id = f"exec_{int(time.time()*1000)}_{case_id}"
+        result_id = f"exec_{int(time.time() * 1000)}_{case_id}"
 
         # Controlled test harness fault injection
         if fault_injection == "CRASH":
@@ -212,10 +212,10 @@ class EngineRunner:
                                 if errors:
                                     schema_valid = False
                                     for err in errors:
-                                        schema_errors.append(f"Line {line_idx+1}: {err.message}")
+                                        schema_errors.append(f"Line {line_idx + 1}: {err.message}")
                         except json.JSONDecodeError as jde:
                             schema_valid = False
-                            schema_errors.append(f"Line {line_idx+1}: Invalid JSON ({jde})")
+                            schema_errors.append(f"Line {line_idx + 1}: Invalid JSON ({jde})")
 
             # Parse summary report
             parser_status = "ok"

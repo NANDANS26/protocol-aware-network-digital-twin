@@ -15,10 +15,12 @@ from network_twin.models.intelligence import EvidenceClassification, TopologyEdg
 
 
 def test_routing_table_importer_json():
-    routes_json = json.dumps([
-        {"destination": "10.0.0.0/24", "next_hop": "192.168.1.1", "interface": "eth0", "metric": "10"},
-        {"destination": "172.16.0.0/16", "next_hop": "192.168.1.254", "interface": "eth1", "metric": "20"},
-    ])
+    routes_json = json.dumps(
+        [
+            {"destination": "10.0.0.0/24", "next_hop": "192.168.1.1", "interface": "eth0", "metric": "10"},
+            {"destination": "172.16.0.0/16", "next_hop": "192.168.1.254", "interface": "eth1", "metric": "20"},
+        ]
+    )
 
     importer = RoutingTableImporter("core-router-01")
     result, evidence_list, nodes, edges = importer.parse(routes_json)
@@ -45,10 +47,12 @@ default,192.168.1.254,eth0,100
 
 
 def test_neighbor_table_importer():
-    arp_json = json.dumps([
-        {"ip": "192.168.1.50", "mac": "00:50:56:c0:00:01", "interface": "eth0"},
-        {"ip": "192.168.1.60", "mac": "00:50:56:c0:00:02", "interface": "eth0"},
-    ])
+    arp_json = json.dumps(
+        [
+            {"ip": "192.168.1.50", "mac": "00:50:56:c0:00:01", "interface": "eth0"},
+            {"ip": "192.168.1.60", "mac": "00:50:56:c0:00:02", "interface": "eth0"},
+        ]
+    )
 
     importer = NeighborTableImporter("switch-agg-01")
     result, evs, nodes, _ = importer.parse(arp_json)

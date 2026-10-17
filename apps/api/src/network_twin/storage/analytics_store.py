@@ -37,10 +37,24 @@ class AnalyticsStore:
             desc = conn.execute(f"DESCRIBE SELECT * FROM read_json_auto('{escaped_jsonl}')").fetchall()
             cols = {row[0].lower() for row in desc}
 
-            src_ip_expr = "network_layer.source_ip" if "network_layer" in cols else ("src_ip" if "src_ip" in cols else "NULL")
-            dst_ip_expr = "network_layer.destination_ip" if "network_layer" in cols else ("dst_ip" if "dst_ip" in cols else "NULL")
-            src_port_expr = "transport_layer.source_port" if "transport_layer" in cols else ("src_port" if "src_port" in cols else "NULL")
-            dst_port_expr = "transport_layer.destination_port" if "transport_layer" in cols else ("dst_port" if "dst_port" in cols else "NULL")
+            src_ip_expr = (
+                "network_layer.source_ip" if "network_layer" in cols else ("src_ip" if "src_ip" in cols else "NULL")
+            )
+            dst_ip_expr = (
+                "network_layer.destination_ip"
+                if "network_layer" in cols
+                else ("dst_ip" if "dst_ip" in cols else "NULL")
+            )
+            src_port_expr = (
+                "transport_layer.source_port"
+                if "transport_layer" in cols
+                else ("src_port" if "src_port" in cols else "NULL")
+            )
+            dst_port_expr = (
+                "transport_layer.destination_port"
+                if "transport_layer" in cols
+                else ("dst_port" if "dst_port" in cols else "NULL")
+            )
 
             if "transport_layer" in cols:
                 proto_expr = "coalesce(transport_layer.protocol, 'OTHER')"
@@ -51,7 +65,11 @@ class AnalyticsStore:
             else:
                 proto_expr = "'OTHER'"
 
-            wire_len_expr = "provenance.wire_length_bytes" if "provenance" in cols else ("payload_length_bytes" if "payload_length_bytes" in cols else "0")
+            wire_len_expr = (
+                "provenance.wire_length_bytes"
+                if "provenance" in cols
+                else ("payload_length_bytes" if "payload_length_bytes" in cols else "0")
+            )
             status_expr = "parser_status.status" if "parser_status" in cols else "'ok'"
 
             sql = f"""

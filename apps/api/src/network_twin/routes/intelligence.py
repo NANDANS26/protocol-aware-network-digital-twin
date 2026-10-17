@@ -80,6 +80,7 @@ class CompareSnapshotsRequest(BaseModel):
 
 # --- Captures ---
 
+
 @router.get("/captures", response_model=list[dict[str, Any]])
 async def list_captures(store: MetadataStore = Depends(get_metadata_store)):
     """Returns all registered capture files with SHA-256 fingerprints."""
@@ -95,6 +96,7 @@ async def get_capture(capture_id: str, store: MetadataStore = Depends(get_metada
 
 
 # --- Assets ---
+
 
 @router.get("/assets", response_model=list[Asset])
 async def list_assets(
@@ -123,6 +125,7 @@ async def get_asset_relationships(asset_id: str, limit: int = 100, store: Metada
 
 # --- Network Segments & Services ---
 
+
 @router.get("/segments", response_model=list[NetworkSegment])
 async def list_segments(store: MetadataStore = Depends(get_metadata_store)):
     """Lists inferred and configured IP subnets."""
@@ -137,6 +140,7 @@ async def list_services(asset_id: str | None = None, store: MetadataStore = Depe
 
 # --- Communication Relationships ---
 
+
 @router.get("/relationships", response_model=list[CommunicationRelationship])
 async def list_relationships(
     asset_id: str | None = None,
@@ -149,6 +153,7 @@ async def list_relationships(
 
 
 # --- Evidence Records ---
+
 
 @router.get("/evidence", response_model=list[EvidenceRecord])
 async def list_evidence(
@@ -177,6 +182,7 @@ async def get_evidence(evidence_id: str, store: MetadataStore = Depends(get_meta
 
 # --- Configuration Imports ---
 
+
 @router.post("/imports", response_model=ConfigImportResult)
 async def import_configuration(req: ConfigImportRequest, store: MetadataStore = Depends(get_metadata_store)):
     """Safely imports routing tables, neighbor tables, or device inventories."""
@@ -203,6 +209,7 @@ async def list_imports(store: MetadataStore = Depends(get_metadata_store)):
 
 # --- Topology Graph ---
 
+
 @router.get("/topology", response_model=TopologyGraph)
 async def get_current_topology(builder: GraphBuilder = Depends(get_graph_builder)):
     """Constructs and returns the active network topology graph from all stored evidence."""
@@ -210,6 +217,7 @@ async def get_current_topology(builder: GraphBuilder = Depends(get_graph_builder
 
 
 # --- Versioned Snapshots ---
+
 
 @router.post("/snapshots", response_model=TopologySnapshot)
 async def create_snapshot(
@@ -260,6 +268,7 @@ async def compare_snapshots(
 
 
 # --- Analytics (DuckDB + Parquet) ---
+
 
 @router.get("/analytics/top-talkers")
 async def get_top_talkers(

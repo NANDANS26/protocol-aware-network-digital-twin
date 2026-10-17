@@ -19,7 +19,9 @@ async def test_full_system_smoke_and_contract_roundtrip():
     app = create_app(settings)
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="http://localhost:8000") as client:
+    async with AsyncClient(
+        transport=transport, base_url="http://localhost:8000"
+    ) as client:
         # 2. Check health endpoint
         health_resp = await client.get("/api/v1/health")
         assert health_resp.status_code == 200
@@ -84,12 +86,18 @@ async def test_full_system_smoke_and_contract_roundtrip():
 
 def test_cpp_engine_binary_smoke():
     # Verify the C++ engine executable was built and responds to --version
-    engine_exe_win = WORKSPACE_ROOT / "build" / "engine" / "Release" / "protocol_engine.exe"
+    engine_exe_win = (
+        WORKSPACE_ROOT / "build" / "engine" / "Release" / "protocol_engine.exe"
+    )
     engine_exe_unix = WORKSPACE_ROOT / "build" / "engine" / "protocol_engine"
 
     exe_path = engine_exe_win if engine_exe_win.exists() else engine_exe_unix
-    assert exe_path.exists(), f"C++ engine executable not found at {engine_exe_win} or {engine_exe_unix}"
+    assert exe_path.exists(), (
+        f"C++ engine executable not found at {engine_exe_win} or {engine_exe_unix}"
+    )
 
-    result = subprocess.run([str(exe_path), "--version"], capture_output=True, text=True, check=True)
+    result = subprocess.run(
+        [str(exe_path), "--version"], capture_output=True, text=True, check=True
+    )
     assert "Protocol-Aware Network Digital Twin Engine" in result.stdout
     assert "C++20" in result.stdout

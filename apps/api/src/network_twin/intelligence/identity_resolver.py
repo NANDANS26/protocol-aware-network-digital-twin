@@ -60,7 +60,9 @@ class IdentityResolver:
                 if clean_mac not in existing.mac_addresses:
                     if existing.mac_addresses and clean_mac != "00:00:00:00:00:00" and not ip_obj.is_multicast:
                         # Conflicting MAC on same IP!
-                        conflict_msg = f"Multiple MAC addresses observed for {clean_ip}: {existing.mac_addresses} vs {clean_mac}"
+                        conflict_msg = (
+                            f"Multiple MAC addresses observed for {clean_ip}: {existing.mac_addresses} vs {clean_mac}"
+                        )
                         if conflict_msg not in existing.conflicts:
                             existing.conflicts.append(conflict_msg)
                             existing.identity_status = IdentityStatus.CONFLICTING

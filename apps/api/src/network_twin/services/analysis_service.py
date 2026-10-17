@@ -89,9 +89,7 @@ class AnalysisService:
     def analyze_capture(self, filename: str, content: bytes) -> AnalysisJob:
         """Saves capture file, executes C++ engine, persists metadata & Parquet, and extracts intelligence."""
         if not self.validate_capture_bytes(content):
-            raise ValueError(
-                "Invalid capture file: Magic bytes do not match valid PCAP or PCAPNG header."
-            )
+            raise ValueError("Invalid capture file: Magic bytes do not match valid PCAP or PCAPNG header.")
 
         binary_path = self.find_engine_binary()
         if not binary_path:
@@ -145,9 +143,12 @@ class AnalysisService:
         # Execute C++ engine binary safely via subprocess (no shell=True)
         cmd = [
             str(binary_path),
-            "--pcap", str(upload_path),
-            "--out", str(events_path),
-            "--summary", str(summary_path),
+            "--pcap",
+            str(upload_path),
+            "--out",
+            str(events_path),
+            "--summary",
+            str(summary_path),
             "--benchmark",
         ]
 
@@ -367,7 +368,9 @@ class AnalysisService:
                                 all_evidence.extend(dns_evs)
                                 # Link hostname to destination asset
                                 for ans_ip in answers:
-                                    asset = self.metadata_store.get_asset(f"asset-{hashlib.sha256(f'ip:{ans_ip.lower()}'.encode()).hexdigest()[:16]}")
+                                    asset = self.metadata_store.get_asset(
+                                        f"asset-{hashlib.sha256(f'ip:{ans_ip.lower()}'.encode()).hexdigest()[:16]}"
+                                    )
                                     if asset and qname not in asset.hostnames:
                                         asset.hostnames.append(qname)
                                         self.metadata_store.upsert_asset(asset)
@@ -378,7 +381,9 @@ class AnalysisService:
                             sni = tls_info.get("sni")
                             dst_ip = ev.get("dst_ip")
                             if sni and dst_ip:
-                                asset = self.metadata_store.get_asset(f"asset-{hashlib.sha256(f'ip:{dst_ip.lower()}'.encode()).hexdigest()[:16]}")
+                                asset = self.metadata_store.get_asset(
+                                    f"asset-{hashlib.sha256(f'ip:{dst_ip.lower()}'.encode()).hexdigest()[:16]}"
+                                )
                                 if asset and sni not in asset.hostnames:
                                     asset.hostnames.append(sni)
                                     self.metadata_store.upsert_asset(asset)

@@ -13,8 +13,10 @@ import {
   Zap,
   Minimize2,
   Filter,
+  Layers,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { StatefulSequenceWorkbench } from './StatefulSequenceWorkbench';
 import type {
   TestCampaign,
   TestCase,
@@ -47,7 +49,7 @@ const ALL_STRATEGIES: GenerationStrategy[] = [
 ];
 
 export const SecurityTestingWorkbench: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'findings' | 'regressions'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'sequences' | 'findings' | 'regressions'>('campaigns');
   const [campaigns, setCampaigns] = useState<TestCampaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<TestCampaign | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -301,6 +303,13 @@ export const SecurityTestingWorkbench: React.FC = () => {
         >
           <Sliders className="w-3.5 h-3.5" />
           <span>Campaigns & Test Cases</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('sequences')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${activeTab === 'sequences' ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/30' : 'text-muted-foreground hover:text-gray-200'}`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Stateful Sequences & State Machine</span>
         </button>
         <button
           onClick={() => setActiveTab('findings')}
@@ -651,6 +660,9 @@ export const SecurityTestingWorkbench: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Tab 4: Stateful Sequences & State Machine (Phase 05) */}
+      {activeTab === 'sequences' && <StatefulSequenceWorkbench />}
 
       {/* Campaign Launcher Modal */}
       {showLauncher && (

@@ -18,9 +18,7 @@ def register_error_handlers(app: FastAPI) -> None:
     """Registers application-wide exception handlers."""
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         req_id = get_request_id(request)
         formatted_errors = []
         for err in exc.errors():
@@ -51,9 +49,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     @app.exception_handler(HTTPException)
-    async def http_exception_handler(
-        request: Request, exc: StarletteHTTPException | HTTPException
-    ) -> JSONResponse:
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException | HTTPException) -> JSONResponse:
         req_id = get_request_id(request)
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
 

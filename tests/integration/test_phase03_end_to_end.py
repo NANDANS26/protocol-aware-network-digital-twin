@@ -185,14 +185,18 @@ async def test_phase03_end_to_end_workflow(test_app):
             "protocol": "TCP",
             "destination_port": 443,
         }
-        reach_resp = await client.post("/api/v1/simulations/reachability", json=reach_query)
+        reach_resp = await client.post(
+            "/api/v1/simulations/reachability", json=reach_query
+        )
         assert reach_resp.status_code == 200
         reach_data = reach_resp.json()
         assert reach_data["status"] == "REACHABLE"
         assert reach_data["reason_code"] == "REACHABLE"
 
         # 4. Run Invariant Verification
-        ver_resp = await client.post("/api/v1/verification/run", json={"model_id": model_id})
+        ver_resp = await client.post(
+            "/api/v1/verification/run", json={"model_id": model_id}
+        )
         assert ver_resp.status_code == 200
         ver_results = ver_resp.json()
         assert len(ver_results) >= 1
@@ -219,18 +223,25 @@ async def test_phase03_end_to_end_workflow(test_app):
                 }
             ],
         }
-        create_scen_resp = await client.post("/api/v1/simulations/scenarios", json=scenario_payload)
+        create_scen_resp = await client.post(
+            "/api/v1/simulations/scenarios", json=scenario_payload
+        )
         assert create_scen_resp.status_code == 200
 
         # 6. Run Counterfactual Scenario
-        run_resp = await client.post("/api/v1/simulations/scenarios/scen-e2e-block-443/run")
+        run_resp = await client.post(
+            "/api/v1/simulations/scenarios/scen-e2e-block-443/run"
+        )
         assert run_resp.status_code == 200
         cf_result = run_resp.json()
 
         assert cf_result["baseline_fingerprint"] == base_fingerprint
         assert cf_result["counterfactual_fingerprint"] != base_fingerprint
         assert cf_result["applied_actions_count"] == 1
-        assert "Scenario 'E2E Emergency Lockdown' applied 1 action(s)" in cf_result["summary_explanation"]
+        assert (
+            "Scenario 'E2E Emergency Lockdown' applied 1 action(s)"
+            in cf_result["summary_explanation"]
+        )
 
         # 7. Confirm Baseline Model Immuntability
         final_model_resp = await client.get(f"/api/v1/models/{model_id}")

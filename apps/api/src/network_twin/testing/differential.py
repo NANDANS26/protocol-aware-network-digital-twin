@@ -68,7 +68,9 @@ def run_pcap_vs_pcapng_differential(
         if res_pcap.exit_code != res_pcapng.exit_code:
             differences.append(f"Exit code mismatch: PCAP={res_pcap.exit_code} vs PCAPNG={res_pcapng.exit_code}")
         if res_pcap.parsed_event_count != res_pcapng.parsed_event_count:
-            differences.append(f"Event count mismatch: PCAP={res_pcap.parsed_event_count} vs PCAPNG={res_pcapng.parsed_event_count}")
+            differences.append(
+                f"Event count mismatch: PCAP={res_pcap.parsed_event_count} vs PCAPNG={res_pcapng.parsed_event_count}"
+            )
 
         equivalent = len(differences) == 0 and res_pcap.passed and res_pcapng.passed
         return DifferentialResult(
@@ -122,8 +124,22 @@ def run_metamorphic_port_shift(
 ) -> DifferentialResult:
     """Metamorphic relation: Mutating destination port affects only transport port fields; IP addresses and flags remain invariant."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        p1 = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(src_port, base_dst_port, 100, 0, {"syn": True})))
-        p2 = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(src_port, shifted_dst_port, 100, 0, {"syn": True})))
+        p1 = make_ethernet_frame(
+            "00:11:22:33:44:55",
+            "00:AA:11:22:33:44",
+            0x0800,
+            make_ipv4_packet(
+                "10.0.0.1", "10.0.0.2", 6, make_tcp_segment(src_port, base_dst_port, 100, 0, {"syn": True})
+            ),
+        )
+        p2 = make_ethernet_frame(
+            "00:11:22:33:44:55",
+            "00:AA:11:22:33:44",
+            0x0800,
+            make_ipv4_packet(
+                "10.0.0.1", "10.0.0.2", 6, make_tcp_segment(src_port, shifted_dst_port, 100, 0, {"syn": True})
+            ),
+        )
 
         file1 = Path(tmpdir) / "port_a.pcap"
         file2 = Path(tmpdir) / "port_b.pcap"
@@ -138,7 +154,9 @@ def run_metamorphic_port_shift(
         if res1.exit_code != res2.exit_code:
             differences.append(f"Exit code delta on port shift: {res1.exit_code} vs {res2.exit_code}")
         if res1.parsed_event_count != res2.parsed_event_count:
-            differences.append(f"Event count delta on port shift: {res1.parsed_event_count} vs {res2.parsed_event_count}")
+            differences.append(
+                f"Event count delta on port shift: {res1.parsed_event_count} vs {res2.parsed_event_count}"
+            )
 
         equivalent = len(differences) == 0 and res1.passed and res2.passed
         return DifferentialResult(

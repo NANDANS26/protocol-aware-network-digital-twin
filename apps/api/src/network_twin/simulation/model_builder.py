@@ -190,7 +190,9 @@ class ModelBuilder:
                 if src_node and prefix_str:
                     try:
                         net = ipaddress.ip_network(prefix_str, strict=False)
-                        next_hop = edge.properties.get("next_hop_ip") or (edge.target_node_id if "." in edge.target_node_id else None)
+                        next_hop = edge.properties.get("next_hop_ip") or (
+                            edge.target_node_id if "." in edge.target_node_id else None
+                        )
                         src_node.routing_table.append(
                             RouteEntry(
                                 route_id=f"route-{edge.edge_id}",
@@ -403,9 +405,7 @@ class ModelBuilder:
         limitations: list[ModelLimitation] = []
 
         # Check routers without explicit firewall rules
-        routers_without_acls = [
-            n.node_id for n in nodes.values() if n.node_type == ModelNodeType.ROUTER and not n.acls
-        ]
+        routers_without_acls = [n.node_id for n in nodes.values() if n.node_type == ModelNodeType.ROUTER and not n.acls]
         if routers_without_acls:
             limitations.append(
                 ModelLimitation(
@@ -417,9 +417,7 @@ class ModelBuilder:
             )
 
         # Check inferred subnets
-        inferred_subnets = [
-            n.node_id for n in nodes.values() if n.node_type == ModelNodeType.SUBNET and n.is_inferred
-        ]
+        inferred_subnets = [n.node_id for n in nodes.values() if n.node_type == ModelNodeType.SUBNET and n.is_inferred]
         if inferred_subnets:
             limitations.append(
                 ModelLimitation(
@@ -434,9 +432,7 @@ class ModelBuilder:
         hosts_without_routes = [
             n.node_id
             for n in nodes.values()
-            if n.node_type == ModelNodeType.HOST
-            and len(n.routing_table) <= 1
-            and not n.default_gateway_ip
+            if n.node_type == ModelNodeType.HOST and len(n.routing_table) <= 1 and not n.default_gateway_ip
         ]
         if hosts_without_routes:
             limitations.append(
@@ -467,9 +463,7 @@ class ModelBuilder:
                 for ip in sorted(iface.ip_assignments, key=lambda x: x.ip_address):
                     hasher.update(f"ip:{ip.ip_address}/{ip.prefix_length}".encode())
             for route in sorted(node.routing_table, key=lambda x: (x.destination_prefix, x.metric)):
-                hasher.update(
-                    f"rt:{route.destination_prefix}:{route.next_hop_ip}:{route.metric}".encode()
-                )
+                hasher.update(f"rt:{route.destination_prefix}:{route.next_hop_ip}:{route.metric}".encode())
             for acl in sorted(node.acls, key=lambda x: x.acl_id):
                 hasher.update(f"acl:{acl.acl_id}:{acl.default_policy.value}".encode())
                 for rule in acl.rules:

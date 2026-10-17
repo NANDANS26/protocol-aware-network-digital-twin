@@ -34,10 +34,19 @@ from network_twin.testing.models import (
     TestCampaign,
     TestCase,
 )
+from network_twin.testing.sequence_models import (
+    ExpectedStateTransition,
+    ProtocolSequence,
+    SequenceFinding,
+    SequenceMutation,
+    SequenceRegressionFixture,
+    SequenceStep,
+    SequenceType,
+)
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class MetadataStore:
@@ -78,6 +87,8 @@ class MetadataStore:
                 self._migrate_to_v2(conn)
             if current_version < 3:
                 self._migrate_to_v3(conn)
+            if current_version < 4:
+                self._migrate_to_v4(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -431,6 +442,69 @@ class MetadataStore:
         )
         conn.commit()
 
+    def _migrate_to_v4(self, conn: sqlite3.Connection):
+        """Schema v4: Stateful Protocol Sequences, Sequence Observations, Findings, and Regressions."""
+        logger.info("Applying Metadata Store Schema Migration v4...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS protocol_sequences (
+                sequence_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                sequence_type TEXT NOT NULL,
+                seed INTEGER NOT NULL,
+                generator_version TEXT NOT NULL,
+                steps_json TEXT NOT NULL,
+                expected_transitions_json TEXT NOT NULL,
+                expected_flow_count INTEGER NOT NULL,
+                expected_properties_json TEXT NOT NULL,
+                mutations_json TEXT NOT NULL,
+                format TEXT NOT NULL,
+                fixture_path TEXT,
+                fixture_hash TEXT,
+                is_supported INTEGER NOT NULL,
+                coverage_gap_notes TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sequence_findings (
+                finding_id TEXT PRIMARY KEY,
+                sequence_id TEXT NOT NULL REFERENCES protocol_sequences(sequence_id) ON DELETE CASCADE,
+                severity TEXT NOT NULL,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                root_cause_summary TEXT NOT NULL,
+                reproduction_command TEXT NOT NULL,
+                fixture_path TEXT NOT NULL,
+                fixture_hash TEXT NOT NULL,
+                minimized INTEGER NOT NULL,
+                minimized_sequence_id TEXT,
+                is_regression INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sequence_regressions (
+                regression_id TEXT PRIMARY KEY,
+                finding_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                sequence_type TEXT NOT NULL,
+                fixture_path TEXT NOT NULL,
+                fixture_hash TEXT NOT NULL,
+                expected_exit_code INTEGER NOT NULL,
+                expected_to_pass INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                last_run_at TEXT,
+                last_run_passed INTEGER
+            );
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (4, datetime('now'), 'Phase 05: Stateful Protocol Sequences, Findings, and Regressions');
+            """
+        )
+        conn.commit()
+
     # --- Captures & Jobs ---
 
     def register_capture(
@@ -511,7 +585,17 @@ class MetadataStore:
                     error_message=excluded.error_message,
                     summary_json=excluded.summary_json;
                 """,
-                (job_id, capture_id, filename, file_size_bytes, status, created_at, completed_at, error_message, summary_json),
+                (
+                    job_id,
+                    capture_id,
+                    filename,
+                    file_size_bytes,
+                    status,
+                    created_at,
+                    completed_at,
+                    error_message,
+                    summary_json,
+                ),
             )
             conn.commit()
 
@@ -614,7 +698,9 @@ class MetadataStore:
             evidence_type=row["evidence_type"],
             source_type=row["source_type"],
             source_artifact_id=row["source_artifact_id"],
-            observation_timestamp=datetime.fromisoformat(row["observation_timestamp"]) if row["observation_timestamp"] else None,
+            observation_timestamp=datetime.fromisoformat(row["observation_timestamp"])
+            if row["observation_timestamp"]
+            else None,
             ingestion_timestamp=datetime.fromisoformat(row["ingestion_timestamp"]),
             src_ref=row["src_ref"],
             dst_ref=row["dst_ref"],
@@ -1591,7 +1677,9 @@ class MetadataStore:
 
     def get_execution_result(self, case_id: str) -> ExecutionResult | None:
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT * FROM execution_results WHERE case_id = ? ORDER BY executed_at DESC LIMIT 1;", (case_id,))
+            cur = conn.execute(
+                "SELECT * FROM execution_results WHERE case_id = ? ORDER BY executed_at DESC LIMIT 1;", (case_id,)
+            )
             row = cur.fetchone()
             if not row:
                 return None
@@ -1781,6 +1869,236 @@ class MetadataStore:
                 (last_run_at, 1 if passed else 0, exit_code, diagnostic, fixture_id),
             )
             conn.commit()
+
+    # --- Phase 05: Stateful Protocol Sequences & Regressions ---
+
+    def save_sequence(self, sequence: ProtocolSequence) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO protocol_sequences (
+                    sequence_id, name, description, sequence_type, seed, generator_version,
+                    steps_json, expected_transitions_json, expected_flow_count,
+                    expected_properties_json, mutations_json, format, fixture_path,
+                    fixture_hash, is_supported, coverage_gap_notes, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(sequence_id) DO UPDATE SET
+                    steps_json = excluded.steps_json,
+                    fixture_path = excluded.fixture_path,
+                    fixture_hash = excluded.fixture_hash;
+                """,
+                (
+                    sequence.sequence_id,
+                    sequence.name,
+                    sequence.description,
+                    sequence.sequence_type.value,
+                    sequence.seed,
+                    sequence.generator_version,
+                    json.dumps([s.model_dump() for s in sequence.steps]),
+                    json.dumps([t.model_dump() for t in sequence.expected_transitions]),
+                    sequence.expected_flow_count,
+                    json.dumps(sequence.expected_properties),
+                    json.dumps([m.model_dump() for m in sequence.mutations]),
+                    sequence.format,
+                    sequence.fixture_path,
+                    sequence.fixture_hash,
+                    1 if sequence.is_supported else 0,
+                    sequence.coverage_gap_notes,
+                    sequence.created_at_iso,
+                ),
+            )
+            conn.commit()
+
+    def get_sequence(self, sequence_id: str) -> ProtocolSequence | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT * FROM protocol_sequences WHERE sequence_id = ?;",
+                (sequence_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            return ProtocolSequence(
+                sequence_id=data["sequence_id"],
+                name=data["name"],
+                description=data["description"],
+                sequence_type=SequenceType(data["sequence_type"]),
+                seed=data["seed"],
+                generator_version=data["generator_version"],
+                steps=[SequenceStep.model_validate(s) for s in json.loads(data["steps_json"])],
+                expected_transitions=[
+                    ExpectedStateTransition.model_validate(t) for t in json.loads(data["expected_transitions_json"])
+                ],
+                expected_flow_count=data["expected_flow_count"],
+                expected_properties=json.loads(data["expected_properties_json"]),
+                mutations=[SequenceMutation.model_validate(m) for m in json.loads(data["mutations_json"])],
+                format=data["format"],
+                fixture_path=data["fixture_path"],
+                fixture_hash=data["fixture_hash"],
+                is_supported=bool(data["is_supported"]),
+                coverage_gap_notes=data["coverage_gap_notes"],
+                created_at_iso=data["created_at"],
+            )
+
+    def list_sequences(self, sequence_type: str | None = None) -> list[ProtocolSequence]:
+        with self._get_connection() as conn:
+            if sequence_type:
+                cur = conn.execute(
+                    "SELECT * FROM protocol_sequences WHERE sequence_type = ? ORDER BY created_at DESC;",
+                    (sequence_type,),
+                )
+            else:
+                cur = conn.execute("SELECT * FROM protocol_sequences ORDER BY created_at DESC;")
+
+            sequences = []
+            for row in cur.fetchall():
+                data = dict(row)
+                sequences.append(
+                    ProtocolSequence(
+                        sequence_id=data["sequence_id"],
+                        name=data["name"],
+                        description=data["description"],
+                        sequence_type=SequenceType(data["sequence_type"]),
+                        seed=data["seed"],
+                        generator_version=data["generator_version"],
+                        steps=[SequenceStep.model_validate(s) for s in json.loads(data["steps_json"])],
+                        expected_transitions=[
+                            ExpectedStateTransition.model_validate(t)
+                            for t in json.loads(data["expected_transitions_json"])
+                        ],
+                        expected_flow_count=data["expected_flow_count"],
+                        expected_properties=json.loads(data["expected_properties_json"]),
+                        mutations=[SequenceMutation.model_validate(m) for m in json.loads(data["mutations_json"])],
+                        format=data["format"],
+                        fixture_path=data["fixture_path"],
+                        fixture_hash=data["fixture_hash"],
+                        is_supported=bool(data["is_supported"]),
+                        coverage_gap_notes=data["coverage_gap_notes"],
+                        created_at_iso=data["created_at"],
+                    )
+                )
+            return sequences
+
+    def save_sequence_finding(self, finding: SequenceFinding) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO sequence_findings (
+                    finding_id, sequence_id, severity, category, title, description,
+                    root_cause_summary, reproduction_command, fixture_path, fixture_hash,
+                    minimized, minimized_sequence_id, is_regression, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(finding_id) DO UPDATE SET
+                    minimized = excluded.minimized,
+                    minimized_sequence_id = excluded.minimized_sequence_id,
+                    is_regression = excluded.is_regression;
+                """,
+                (
+                    finding.finding_id,
+                    finding.sequence_id,
+                    finding.severity.value,
+                    finding.category.value,
+                    finding.title,
+                    finding.description,
+                    finding.root_cause_summary,
+                    finding.reproduction_command,
+                    finding.fixture_path,
+                    finding.fixture_hash,
+                    1 if finding.minimized else 0,
+                    finding.minimized_sequence_id,
+                    1 if finding.is_regression else 0,
+                    finding.created_at_iso,
+                ),
+            )
+            conn.commit()
+
+    def list_sequence_findings(self, sequence_id: str | None = None) -> list[SequenceFinding]:
+        with self._get_connection() as conn:
+            if sequence_id:
+                cur = conn.execute(
+                    "SELECT * FROM sequence_findings WHERE sequence_id = ? ORDER BY created_at DESC;",
+                    (sequence_id,),
+                )
+            else:
+                cur = conn.execute("SELECT * FROM sequence_findings ORDER BY created_at DESC;")
+
+            findings = []
+            for row in cur.fetchall():
+                data = dict(row)
+                data["minimized"] = bool(data["minimized"])
+                data["is_regression"] = bool(data["is_regression"])
+                data["created_at_iso"] = data.pop("created_at")
+                findings.append(SequenceFinding.model_validate(data))
+            return findings
+
+    def promote_sequence_regression(self, finding_id: str, name: str) -> SequenceRegressionFixture:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM sequence_findings WHERE finding_id = ?;", (finding_id,))
+            row = cur.fetchone()
+            if not row:
+                raise ValueError(f"Sequence finding not found: {finding_id}")
+
+            finding_data = dict(row)
+            seq_id = finding_data["sequence_id"]
+            cur_seq = conn.execute("SELECT sequence_type FROM protocol_sequences WHERE sequence_id = ?;", (seq_id,))
+            seq_row = cur_seq.fetchone()
+            seq_type = seq_row[0] if seq_row else "TCP_HANDSHAKE_TEARDOWN"
+
+            reg_id = f"seq-regr-{finding_id}"
+            now_iso = datetime.now(UTC).isoformat()
+
+            conn.execute(
+                """
+                INSERT INTO sequence_regressions (
+                    regression_id, finding_id, name, sequence_type, fixture_path,
+                    fixture_hash, expected_exit_code, expected_to_pass, created_at,
+                    last_run_at, last_run_passed
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                ON CONFLICT(regression_id) DO UPDATE SET name = excluded.name;
+                """,
+                (
+                    reg_id,
+                    finding_id,
+                    name,
+                    seq_type,
+                    finding_data["fixture_path"],
+                    finding_data["fixture_hash"],
+                    0,
+                    1,
+                    now_iso,
+                ),
+            )
+            conn.execute("UPDATE sequence_findings SET is_regression = 1 WHERE finding_id = ?;", (finding_id,))
+            conn.commit()
+
+            return SequenceRegressionFixture(
+                regression_id=reg_id,
+                finding_id=finding_id,
+                name=name,
+                sequence_type=SequenceType(seq_type),
+                fixture_path=finding_data["fixture_path"],
+                fixture_hash=finding_data["fixture_hash"],
+                expected_exit_code=0,
+                expected_to_pass=True,
+                created_at_iso=now_iso,
+            )
+
+    def list_sequence_regressions(self) -> list[SequenceRegressionFixture]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM sequence_regressions ORDER BY created_at DESC;")
+            regressions = []
+            for row in cur.fetchall():
+                data = dict(row)
+                data["expected_to_pass"] = bool(data["expected_to_pass"])
+                if data["last_run_passed"] is not None:
+                    data["last_run_passed"] = bool(data["last_run_passed"])
+                data["created_at_iso"] = data.pop("created_at")
+                last_run_at = data.pop("last_run_at", None)
+                if last_run_at:
+                    data["last_run_iso"] = last_run_at
+                regressions.append(SequenceRegressionFixture.model_validate(data))
+            return regressions
 
 
 metadata_store = MetadataStore()

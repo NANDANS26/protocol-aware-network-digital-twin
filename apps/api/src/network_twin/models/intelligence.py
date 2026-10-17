@@ -9,15 +9,17 @@ from pydantic import BaseModel, Field
 
 class IdentityStatus(StrEnum):
     """Classification of asset identity confidence and stability."""
-    CONFIRMED = "CONFIRMED"          # Consistent IP + MAC or matching authoritative configuration
-    PROBABLE = "PROBABLE"            # Consistent IP without local MAC observation (e.g. routed traffic)
-    AMBIGUOUS = "AMBIGUOUS"          # Multiple candidate identities or overlapping ephemeral observations
-    CONFLICTING = "CONFLICTING"      # Contradictory observations (e.g. conflicting MACs on same local IP)
-    UNRESOLVED = "UNRESOLVED"        # Insufficient evidence to establish persistent identity
+
+    CONFIRMED = "CONFIRMED"  # Consistent IP + MAC or matching authoritative configuration
+    PROBABLE = "PROBABLE"  # Consistent IP without local MAC observation (e.g. routed traffic)
+    AMBIGUOUS = "AMBIGUOUS"  # Multiple candidate identities or overlapping ephemeral observations
+    CONFLICTING = "CONFLICTING"  # Contradictory observations (e.g. conflicting MACs on same local IP)
+    UNRESOLVED = "UNRESOLVED"  # Insufficient evidence to establish persistent identity
 
 
 class EvidenceType(StrEnum):
     """Categorization of evidence supporting network intelligence assertions."""
+
     PACKET_OBSERVED = "PACKET_OBSERVED"
     DNS_OBSERVED = "DNS_OBSERVED"
     IMPORTED_CONFIGURATION = "IMPORTED_CONFIGURATION"
@@ -29,6 +31,7 @@ class EvidenceType(StrEnum):
 
 class TopologyNodeType(StrEnum):
     """Types of entities represented in the network topology graph."""
+
     ASSET = "ASSET"
     SUBNET = "SUBNET"
     SERVICE = "SERVICE"
@@ -39,6 +42,7 @@ class TopologyNodeType(StrEnum):
 
 class TopologyEdgeType(StrEnum):
     """Types of relationships represented in the network topology graph."""
+
     OBSERVED_COMMUNICATION = "OBSERVED_COMMUNICATION"
     INTERFACE_MEMBERSHIP = "INTERFACE_MEMBERSHIP"
     SUBNET_ATTACHMENT = "SUBNET_ATTACHMENT"
@@ -51,6 +55,7 @@ class TopologyEdgeType(StrEnum):
 
 class EvidenceClassification(StrEnum):
     """High-level classification separating direct physical observations from inferences."""
+
     DIRECT_OBSERVATION = "DIRECT_OBSERVATION"
     CONFIGURED = "CONFIGURED"
     INFERRED = "INFERRED"
@@ -59,8 +64,10 @@ class EvidenceClassification(StrEnum):
 
 # --- Evidence Record ---
 
+
 class EvidenceRecord(BaseModel):
     """An immutable, auditable record supporting an observation or intelligence claim."""
+
     evidence_id: str = Field(description="Unique identifier for this evidence item")
     evidence_type: EvidenceType
     source_type: str = Field(description="Source kind: 'pcap', 'pcapng', 'config_import', etc.")
@@ -77,8 +84,10 @@ class EvidenceRecord(BaseModel):
 
 # --- Asset Model ---
 
+
 class Asset(BaseModel):
     """An observed or configured network endpoint/device."""
+
     asset_id: str = Field(description="Stable internal asset identifier")
     primary_ip: str = Field(description="Canonical primary IP address")
     ip_addresses: list[str] = Field(default_factory=list, description="All observed IP addresses for this asset")
@@ -91,13 +100,17 @@ class Asset(BaseModel):
     identity_status: IdentityStatus = Field(default=IdentityStatus.PROBABLE)
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     conflicts: list[str] = Field(default_factory=list, description="Any detected identity conflicts")
-    observation_sources: list[str] = Field(default_factory=list, description="Captures or imports contributing evidence")
+    observation_sources: list[str] = Field(
+        default_factory=list, description="Captures or imports contributing evidence"
+    )
 
 
 # --- Network Segment ---
 
+
 class NetworkSegment(BaseModel):
     """An inferred or configured IP subnet / network segment."""
+
     segment_id: str = Field(description="Unique segment identifier")
     cidr_prefix: str = Field(description="Subnet prefix, e.g. '192.168.1.0/24' or 'fc00::/7'")
     address_family: str = Field(description="'IPv4' or 'IPv6'")
@@ -112,8 +125,10 @@ class NetworkSegment(BaseModel):
 
 # --- Network Service ---
 
+
 class NetworkService(BaseModel):
     """An observed network application service listening on an endpoint."""
+
     service_id: str = Field(description="Unique service identifier")
     asset_id: str = Field(description="Asset hosting this service")
     server_ip: str = Field(description="Listening IP address")
@@ -130,8 +145,10 @@ class NetworkService(BaseModel):
 
 # --- Communication Relationship ---
 
+
 class CommunicationRelationship(BaseModel):
     """An observed or verified bidirectional/unidirectional communication between endpoints."""
+
     relationship_id: str = Field(description="Unique relationship identifier")
     src_asset_id: str = Field(description="Initiator asset ID")
     dst_asset_id: str = Field(description="Responder asset ID")
@@ -152,8 +169,10 @@ class CommunicationRelationship(BaseModel):
 
 # --- Topology Graph Elements ---
 
+
 class TopologyNode(BaseModel):
     """A node in the reconstructed network graph."""
+
     node_id: str = Field(description="Stable identifier for graph node")
     node_type: TopologyNodeType
     label: str = Field(description="Human-readable label (e.g. IP, Hostname, Subnet CIDR)")
@@ -164,6 +183,7 @@ class TopologyNode(BaseModel):
 
 class TopologyEdge(BaseModel):
     """A directed or bidirectional edge in the network topology graph."""
+
     edge_id: str = Field(description="Stable edge identifier")
     source_node_id: str
     target_node_id: str
@@ -179,6 +199,7 @@ class TopologyEdge(BaseModel):
 
 class TopologyGraph(BaseModel):
     """Complete network topology graph representation."""
+
     graph_id: str
     nodes: list[TopologyNode] = Field(default_factory=list)
     edges: list[TopologyEdge] = Field(default_factory=list)
@@ -190,8 +211,10 @@ class TopologyGraph(BaseModel):
 
 # --- Versioned Snapshot ---
 
+
 class TopologySnapshot(BaseModel):
     """An immutable, versioned snapshot of network topology at a point in time."""
+
     snapshot_id: str = Field(description="Unique snapshot fingerprint / identifier")
     name: str = Field(description="Descriptive snapshot title")
     created_at: datetime
@@ -208,6 +231,7 @@ class TopologySnapshot(BaseModel):
 
 class SnapshotComparisonDiff(BaseModel):
     """Differential analysis between two topology snapshots."""
+
     base_snapshot_id: str
     target_snapshot_id: str
     added_nodes: list[TopologyNode] = Field(default_factory=list)
@@ -221,8 +245,10 @@ class SnapshotComparisonDiff(BaseModel):
 
 # --- Configuration Imports ---
 
+
 class ConfigImportRequest(BaseModel):
     """Request model for importing network configurations."""
+
     format: str = Field(description="'routing_table', 'arp_table', 'interfaces', 'inventory'")
     source_name: str = Field(description="Origin system or operator label")
     content: str = Field(description="Raw configuration content (JSON or CSV)")
@@ -230,6 +256,7 @@ class ConfigImportRequest(BaseModel):
 
 class ConfigImportResult(BaseModel):
     """Result of a configuration import operation."""
+
     import_id: str
     format: str
     source_name: str

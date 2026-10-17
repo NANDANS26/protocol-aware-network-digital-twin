@@ -30,7 +30,7 @@ def checksum_ip(header_bytes: bytes) -> int:
     """Calculate 16-bit one's complement Internet Checksum."""
     if len(header_bytes) % 2 == 1:
         header_bytes += b"\x00"
-    s = sum(struct.unpack(f"!{len(header_bytes)//2}H", header_bytes))
+    s = sum(struct.unpack(f"!{len(header_bytes) // 2}H", header_bytes))
     while s >> 16:
         s = (s & 0xFFFF) + (s >> 16)
     return ~s & 0xFFFF
@@ -73,11 +73,7 @@ def write_pcapng(filepath: str | Path, packets: list[tuple[int, int, bytes]]) ->
             pad_len = (4 - (cap_len % 4)) % 4
             padded_pkt = pkt_bytes + (b"\x00" * pad_len)
 
-            epb_body = (
-                struct.pack("<IIII", 0, ts_high, ts_low, cap_len)
-                + struct.pack("<I", orig_len)
-                + padded_pkt
-            )
+            epb_body = struct.pack("<IIII", 0, ts_high, ts_low, cap_len) + struct.pack("<I", orig_len) + padded_pkt
             epb_len = 8 + len(epb_body) + 4
             epb = struct.pack("<II", 0x00000006, epb_len) + epb_body + struct.pack("<I", epb_len)
             f.write(epb)
@@ -129,9 +125,7 @@ def make_ipv4_packet(
     v_ihl = ((version & 0x0F) << 4) | (ihl & 0x0F)
     tos = 0
     header_len = ihl * 4
-    total_len = (
-        total_length_override if total_length_override is not None else header_len + len(payload)
-    )
+    total_len = total_length_override if total_length_override is not None else header_len + len(payload)
 
     flags_frag = (0x4000 if df else 0) | (0x2000 if mf else 0) | (frag_offset & 0x1FFF)
 
@@ -204,7 +198,7 @@ def make_ipv6_packet(
 
     full_payload = ext_bytes + payload
     payload_len = len(full_payload)
-    vtc_fl = ((version & 0x0F) << 28)
+    vtc_fl = (version & 0x0F) << 28
 
     hdr = struct.pack("!IHBB", vtc_fl, payload_len, first_next_hdr, hop_limit) + src_bytes + dst_bytes
     return hdr + full_payload
@@ -222,11 +216,7 @@ def make_tcp_segment(
     data_offset_override: int | None = None,
 ) -> bytes:
     """Constructs TCP segment with arbitrary flags and options."""
-    data_offset = (
-        data_offset_override
-        if data_offset_override is not None
-        else (20 + len(options) + 3) // 4
-    )
+    data_offset = data_offset_override if data_offset_override is not None else (20 + len(options) + 3) // 4
     flags_val = 0
     if flags.get("fin"):
         flags_val |= 0x01
@@ -361,9 +351,7 @@ def make_tls_client_hello(
     sni_bytes = sni.encode("ascii")
     sni_len = 0xFFFF if corrupt_sni else len(sni_bytes)
     sni_ext = (
-        struct.pack("!HH", 0x0000, len(sni_bytes) + 5)
-        + struct.pack("!HBH", len(sni_bytes) + 3, 0, sni_len)
-        + sni_bytes
+        struct.pack("!HH", 0x0000, len(sni_bytes) + 5) + struct.pack("!HBH", len(sni_bytes) + 3, 0, sni_len) + sni_bytes
     )
 
     alpn_bytes = alpn.encode("ascii")
@@ -457,165 +445,665 @@ def generate_cases_for_target(
         # Baseline Conformance
         if strategy == GenerationStrategy.BASELINE_CONFORMANCE:
             if target == ProtocolTarget.ETHERNET:
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"ping"))
-                cases.append(GeneratedCaseData(f"eth_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"ping"),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"eth_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.VLAN:
                 vlan_tag = [(0x8100, 2, 0, 100 + idx)]
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"vlan_test"), vlan_tags=vlan_tag)
-                cases.append(GeneratedCaseData(f"vlan_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"vlan_test"),
+                    vlan_tags=vlan_tag,
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"vlan_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.IPV4:
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "192.168.1.20", 6, make_tcp_segment(1234, 80, 100, 0, {"syn": True})))
-                cases.append(GeneratedCaseData(f"ipv4_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet(
+                        "192.168.1.10", "192.168.1.20", 6, make_tcp_segment(1234, 80, 100, 0, {"syn": True})
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv4_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.IPV6:
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x86DD, make_ipv6_packet("2001:db8::1", "2001:db8::2", 6, make_tcp_segment(1234, 80, 100, 0, {"syn": True})))
-                cases.append(GeneratedCaseData(f"ipv6_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x86DD,
+                    make_ipv6_packet(
+                        "2001:db8::1", "2001:db8::2", 6, make_tcp_segment(1234, 80, 100, 0, {"syn": True})
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv6_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.TCP:
                 tcp = make_tcp_segment(50000 + idx, 443, 1000, 0, {"syn": True})
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "192.168.1.1", 6, tcp))
-                cases.append(GeneratedCaseData(f"tcp_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("192.168.1.10", "192.168.1.1", 6, tcp),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tcp_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.UDP:
                 udp = make_udp_datagram(5353, 5353, b"\x00\x00\x00\x00")
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "224.0.0.251", 17, udp))
-                cases.append(GeneratedCaseData(f"udp_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("192.168.1.10", "224.0.0.251", 17, udp),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"udp_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.DNS:
                 dns = make_dns_query(0x1000 + idx, f"test{idx}.domain.local")
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "8.8.8.8", 17, make_udp_datagram(53535, 53, dns)))
-                cases.append(GeneratedCaseData(f"dns_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("192.168.1.10", "8.8.8.8", 17, make_udp_datagram(53535, 53, dns)),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"dns_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.HTTP:
                 http = make_http_payload("GET", f"/item/{idx}", {"Host": "api.local", "User-Agent": "Tester"})
                 tcp = make_tcp_segment(40000, 80, 1, 1, {"psh": True, "ack": True}, http)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "192.168.1.100", 6, tcp))
-                cases.append(GeneratedCaseData(f"http_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("192.168.1.10", "192.168.1.100", 6, tcp),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"http_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.TLS_CLIENT_HELLO:
                 tls = make_tls_client_hello(f"service{idx}.corp.internal")
                 tcp = make_tcp_segment(40001, 443, 1, 1, {"psh": True, "ack": True}, tls)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "192.168.1.100", 6, tcp))
-                cases.append(GeneratedCaseData(f"tls_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("192.168.1.10", "192.168.1.100", 6, tcp),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tls_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.QUIC_CLASSIFIER:
                 quic = make_quic_packet()
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("192.168.1.10", "192.168.1.100", 17, make_udp_datagram(4433, 443, quic)))
-                cases.append(GeneratedCaseData(f"quic_base_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("192.168.1.10", "192.168.1.100", 17, make_udp_datagram(4433, 443, quic)),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"quic_base_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.NONE],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
 
         # Mutation Fuzzing (Bit flips, checksum corruption, option tampering)
         elif strategy == GenerationStrategy.MUTATION_FUZZING:
             if target == ProtocolTarget.IPV4:
                 # Corrupt checksum
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"echo", corrupt_checksum=True))
-                cases.append(GeneratedCaseData(f"ipv4_bad_cksum_{idx}", target, strategy, [MutationOperator.CORRUPT_CHECKSUM], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"echo", corrupt_checksum=True),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv4_bad_cksum_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.CORRUPT_CHECKSUM],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.TCP:
                 # Contradictory flags SYN+FIN
                 tcp = make_tcp_segment(1234, 80, 100, 0, {"syn": True, "fin": True})
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, tcp))
-                cases.append(GeneratedCaseData(f"tcp_syn_fin_{idx}", target, strategy, [MutationOperator.CONTRADICTORY_FLAGS], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, tcp)
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tcp_syn_fin_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.CONTRADICTORY_FLAGS],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.DNS:
                 # Pointer loop
                 dns = make_dns_query(0x9999, "loop.internal", pointer_loop=True)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "8.8.8.8", 17, make_udp_datagram(53535, 53, dns)))
-                cases.append(GeneratedCaseData(f"dns_ptr_loop_{idx}", target, strategy, [MutationOperator.POINTER_LOOP], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "8.8.8.8", 17, make_udp_datagram(53535, 53, dns)),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"dns_ptr_loop_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.POINTER_LOOP],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.TLS_CLIENT_HELLO:
                 # Corrupt SNI extension length
                 tls = make_tls_client_hello(corrupt_sni=True)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 443, 1, 1, {"ack": True}, tls)))
-                cases.append(GeneratedCaseData(f"tls_bad_sni_{idx}", target, strategy, [MutationOperator.MALFORMED_OPTIONS], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 443, 1, 1, {"ack": True}, tls)),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tls_bad_sni_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.MALFORMED_OPTIONS],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.QUIC_CLASSIFIER:
                 # Corrupted Fixed Bit (bit 6 = 0)
                 quic = make_quic_packet(corrupt_fixed_bit=True)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, make_udp_datagram(4433, 443, quic)))
-                cases.append(GeneratedCaseData(f"quic_bad_fixed_bit_{idx}", target, strategy, [MutationOperator.BIT_FLIP], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, make_udp_datagram(4433, 443, quic)),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"quic_bad_fixed_bit_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.BIT_FLIP],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             else:
                 # General random bit flip
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, make_udp_datagram(1234, 5678, b"fuzz_data")))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, make_udp_datagram(1234, 5678, b"fuzz_data")),
+                )
                 mutated = bytearray(p)
                 flip_pos = c_rng.randint(14, len(mutated) - 1)
                 mutated[flip_pos] ^= 0xFF
-                cases.append(GeneratedCaseData(f"fuzz_bitflip_{target.lower()}_{idx}", target, strategy, [MutationOperator.BIT_FLIP], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, bytes(mutated))]))
+                cases.append(
+                    GeneratedCaseData(
+                        f"fuzz_bitflip_{target.lower()}_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.BIT_FLIP],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, bytes(mutated))],
+                    )
+                )
 
         # Boundary Edge Cases
         elif strategy == GenerationStrategy.BOUNDARY_EDGE_CASES:
             if target == ProtocolTarget.VLAN:
                 # Q-in-Q double VLAN tag (0x88A8 outer, 0x8100 inner)
                 vlan_tags = [(0x88A8, 7, 1, 4094), (0x8100, 0, 0, 1)]
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"qinq"), vlan_tags=vlan_tags)
-                cases.append(GeneratedCaseData(f"vlan_qinq_boundary_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"qinq"),
+                    vlan_tags=vlan_tags,
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"vlan_qinq_boundary_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.IPV4:
                 # Extreme TTL (TTL = 1 and TTL = 255)
                 ttl_val = 1 if idx % 2 == 0 else 255
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"ping", ttl=ttl_val))
-                cases.append(GeneratedCaseData(f"ipv4_ttl_{ttl_val}_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"ping", ttl=ttl_val),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv4_ttl_{ttl_val}_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.IPV6:
                 # Extension header chain: Hop-by-Hop (0) -> Routing (43) -> TCP
                 exts = [(0, b"\x00\x00\x00\x00\x00\x00"), (43, b"\x00\x00\x00\x00\x00\x00")]
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x86DD, make_ipv6_packet("2001:db8::1", "2001:db8::2", 6, make_tcp_segment(1234, 80, 1, 0, {"syn": True}), extension_headers=exts))
-                cases.append(GeneratedCaseData(f"ipv6_ext_chain_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x86DD,
+                    make_ipv6_packet(
+                        "2001:db8::1",
+                        "2001:db8::2",
+                        6,
+                        make_tcp_segment(1234, 80, 1, 0, {"syn": True}),
+                        extension_headers=exts,
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv6_ext_chain_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.TCP:
                 # XMAS scan: FIN, URG, PSH, SYN, RST, ACK, ECE, CWR
-                tcp = make_tcp_segment(1234, 80, 0xFFFFFFFF, 0xFFFFFFFF, {"fin": True, "syn": True, "rst": True, "psh": True, "ack": True, "urg": True, "ece": True, "cwr": True})
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, tcp))
-                cases.append(GeneratedCaseData(f"tcp_xmas_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                tcp = make_tcp_segment(
+                    1234,
+                    80,
+                    0xFFFFFFFF,
+                    0xFFFFFFFF,
+                    {
+                        "fin": True,
+                        "syn": True,
+                        "rst": True,
+                        "psh": True,
+                        "ack": True,
+                        "urg": True,
+                        "ece": True,
+                        "cwr": True,
+                    },
+                )
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, tcp)
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tcp_xmas_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.UDP:
                 # UDP length 8 (header only, zero payload)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, make_udp_datagram(1234, 5678, b"")))
-                cases.append(GeneratedCaseData(f"udp_zero_len_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, make_udp_datagram(1234, 5678, b"")),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"udp_zero_len_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.DNS:
                 # Out-of-bounds compression pointer (points beyond message boundary)
                 dns = make_dns_query(0x2222, "oob.internal", pointer_oob=True)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "8.8.8.8", 17, make_udp_datagram(53535, 53, dns)))
-                cases.append(GeneratedCaseData(f"dns_ptr_oob_{idx}", target, strategy, [MutationOperator.POINTER_OUT_OF_BOUNDS], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "8.8.8.8", 17, make_udp_datagram(53535, 53, dns)),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"dns_ptr_oob_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.POINTER_OUT_OF_BOUNDS],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.HTTP:
                 # Bare LF instead of CRLF
                 http = make_http_payload("GET", "/index.html", {"Host": "target.local"}, bare_lf=True)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 80, 1, 1, {"psh": True, "ack": True}, http)))
-                cases.append(GeneratedCaseData(f"http_bare_lf_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet(
+                        "10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 80, 1, 1, {"psh": True, "ack": True}, http)
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"http_bare_lf_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
             else:
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"boundary"))
-                cases.append(GeneratedCaseData(f"boundary_gen_{target.lower()}_{idx}", target, strategy, [MutationOperator.EXTREME_BOUNDARIES], ExpectedBehavior.ACCEPT_VALID, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"boundary"),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"boundary_gen_{target.lower()}_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.EXTREME_BOUNDARIES],
+                        ExpectedBehavior.ACCEPT_VALID,
+                        [(base_ts, 0, p)],
+                    )
+                )
 
         # Malformed Inputs (Truncations, invalid versions, bad lengths)
         elif strategy == GenerationStrategy.MALFORMED_INPUTS:
             if target == ProtocolTarget.ETHERNET:
                 # Truncated Ethernet header (<14 bytes)
                 p = b"\x00\x11\x22\x33\x44\x55\x00\xaa"  # 8 bytes
-                cases.append(GeneratedCaseData(f"eth_truncated_{idx}", target, strategy, [MutationOperator.TRUNCATE_HEADER], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                cases.append(
+                    GeneratedCaseData(
+                        f"eth_truncated_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.TRUNCATE_HEADER],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.IPV4:
                 # Invalid IPv4 version (version = 15 or 0)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"badver", version=15))
-                cases.append(GeneratedCaseData(f"ipv4_bad_version_{idx}", target, strategy, [MutationOperator.INVALID_VERSION], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"badver", version=15),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv4_bad_version_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.INVALID_VERSION],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.IPV6:
                 # Truncated IPv6 (<40 bytes)
-                eth = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x86DD, b"\x60\x00\x00\x00\x00\x10\x06\x40" + (b"\xaa" * 16)) # 24 bytes only
-                cases.append(GeneratedCaseData(f"ipv6_truncated_{idx}", target, strategy, [MutationOperator.TRUNCATE_HEADER], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, eth)]))
+                eth = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x86DD,
+                    b"\x60\x00\x00\x00\x00\x10\x06\x40" + (b"\xaa" * 16),
+                )  # 24 bytes only
+                cases.append(
+                    GeneratedCaseData(
+                        f"ipv6_truncated_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.TRUNCATE_HEADER],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, eth)],
+                    )
+                )
             elif target == ProtocolTarget.TCP:
                 # Invalid TCP data offset (<5 words, e.g. 2 words)
                 tcp = make_tcp_segment(1234, 80, 100, 0, {"syn": True}, data_offset_override=2)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, tcp))
-                cases.append(GeneratedCaseData(f"tcp_bad_offset_{idx}", target, strategy, [MutationOperator.INVALID_LENGTH], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, tcp)
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tcp_bad_offset_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.INVALID_LENGTH],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.UDP:
                 # UDP length field smaller than 8
                 udp = make_udp_datagram(1234, 5678, b"data", length_override=4)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, udp))
-                cases.append(GeneratedCaseData(f"udp_bad_length_{idx}", target, strategy, [MutationOperator.INVALID_LENGTH], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 17, udp)
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"udp_bad_length_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.INVALID_LENGTH],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.DNS:
                 # Truncated DNS header (only 6 bytes)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "8.8.8.8", 17, make_udp_datagram(53535, 53, b"\x12\x34\x01\x00\x00\x01")))
-                cases.append(GeneratedCaseData(f"dns_truncated_{idx}", target, strategy, [MutationOperator.TRUNCATE_HEADER], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet(
+                        "10.0.0.1", "8.8.8.8", 17, make_udp_datagram(53535, 53, b"\x12\x34\x01\x00\x00\x01")
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"dns_truncated_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.TRUNCATE_HEADER],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.HTTP:
                 # Malformed request line
                 http = b"INVALID_REQUEST_LINE_WITHOUT_METHOD_OR_VERSION\r\n\r\n"
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 80, 1, 1, {"psh": True, "ack": True}, http)))
-                cases.append(GeneratedCaseData(f"http_malformed_{idx}", target, strategy, [MutationOperator.MALFORMED_OPTIONS], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet(
+                        "10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 80, 1, 1, {"psh": True, "ack": True}, http)
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"http_malformed_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.MALFORMED_OPTIONS],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             elif target == ProtocolTarget.TLS_CLIENT_HELLO:
                 # Truncated record header (3 bytes instead of 5)
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 443, 1, 1, {"psh": True, "ack": True}, b"\x16\x03\x01")))
-                cases.append(GeneratedCaseData(f"tls_truncated_{idx}", target, strategy, [MutationOperator.TRUNCATE_HEADER], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet(
+                        "10.0.0.1",
+                        "10.0.0.2",
+                        6,
+                        make_tcp_segment(1234, 443, 1, 1, {"psh": True, "ack": True}, b"\x16\x03\x01"),
+                    ),
+                )
+                cases.append(
+                    GeneratedCaseData(
+                        f"tls_truncated_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.TRUNCATE_HEADER],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
             else:
-                p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"bad"))[:25]
-                cases.append(GeneratedCaseData(f"malformed_{target.lower()}_{idx}", target, strategy, [MutationOperator.TRUNCATE_PAYLOAD], ExpectedBehavior.SAFE_REJECT, [(base_ts, 0, p)]))
+                p = make_ethernet_frame(
+                    "00:11:22:33:44:55",
+                    "00:AA:11:22:33:44",
+                    0x0800,
+                    make_ipv4_packet("10.0.0.1", "10.0.0.2", 1, b"bad"),
+                )[:25]
+                cases.append(
+                    GeneratedCaseData(
+                        f"malformed_{target.lower()}_{idx}",
+                        target,
+                        strategy,
+                        [MutationOperator.TRUNCATE_PAYLOAD],
+                        ExpectedBehavior.SAFE_REJECT,
+                        [(base_ts, 0, p)],
+                    )
+                )
 
         # Differential Equivalence (Classic PCAP vs PCAPNG)
         elif strategy == GenerationStrategy.DIFFERENTIAL_EQUIVALENCE:
-            p = make_ethernet_frame("00:11:22:33:44:55", "00:AA:11:22:33:44", 0x0800, make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234 + idx, 80, 1000 + idx, 0, {"syn": True})))
+            p = make_ethernet_frame(
+                "00:11:22:33:44:55",
+                "00:AA:11:22:33:44",
+                0x0800,
+                make_ipv4_packet(
+                    "10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234 + idx, 80, 1000 + idx, 0, {"syn": True})
+                ),
+            )
             fmt = "pcapng" if idx % 2 == 1 else "pcap"
-            cases.append(GeneratedCaseData(f"diff_{target.lower()}_{fmt}_{idx}", target, strategy, [MutationOperator.NONE], ExpectedBehavior.EQUIVALENT_PARSING, [(base_ts, 0, p)], fixture_format=fmt))
+            cases.append(
+                GeneratedCaseData(
+                    f"diff_{target.lower()}_{fmt}_{idx}",
+                    target,
+                    strategy,
+                    [MutationOperator.NONE],
+                    ExpectedBehavior.EQUIVALENT_PARSING,
+                    [(base_ts, 0, p)],
+                    fixture_format=fmt,
+                )
+            )
 
     return cases
 

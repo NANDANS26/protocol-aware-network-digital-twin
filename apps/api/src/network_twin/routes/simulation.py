@@ -61,6 +61,7 @@ def get_model_builder(store: MetadataStore = Depends(get_metadata_store)) -> Mod
 
 # --- Request Models ---
 
+
 class BuildModelRequest(BaseModel):
     snapshot_id: str
     name: str | None = None
@@ -76,6 +77,7 @@ class RunVerificationRequest(BaseModel):
 
 
 # --- Network Models Endpoints ---
+
 
 @router.post("/models/build", response_model=NetworkModel)
 async def build_network_model(
@@ -124,6 +126,7 @@ async def get_model_limitations(model_id: str, store: MetadataStore = Depends(ge
 
 # --- Reachability Simulation Endpoints ---
 
+
 @router.post("/simulations/reachability", response_model=ReachabilityResult)
 async def evaluate_reachability(
     query: ReachabilityQuery,
@@ -149,6 +152,7 @@ async def evaluate_reachability(
 
 
 # --- Counterfactual Scenarios Endpoints ---
+
 
 @router.post("/simulations/scenarios", response_model=SimulationScenario)
 async def create_scenario(
@@ -216,6 +220,7 @@ async def run_scenario(
 
 
 # --- Security Invariants Endpoints ---
+
 
 @router.get("/verification/invariants", response_model=list[SecurityInvariant])
 async def list_invariants(store: MetadataStore = Depends(get_metadata_store)):

@@ -37,13 +37,17 @@ class SubsystemService:
             "protocol_analysis_engine": SubsystemReport(
                 status=SubsystemState.OK if engine_ready else SubsystemState.DEGRADED,
                 operational_state=OperationalState.OPERATIONAL if engine_ready else OperationalState.UNAVAILABLE,
-                details="C++20 ingestion engine built and operational (PCAP/PCAPNG, IPv4/v6, TCP/UDP, DNS/HTTP/TLS/QUIC)" if engine_ready else "C++ engine binary not compiled",
+                details="C++20 ingestion engine built and operational (PCAP/PCAPNG, IPv4/v6, TCP/UDP, DNS/HTTP/TLS/QUIC)"
+                if engine_ready
+                else "C++ engine binary not compiled",
                 last_checked=now,
             ),
             "flow_tracker": SubsystemReport(
                 status=SubsystemState.OK if engine_ready else SubsystemState.DEGRADED,
                 operational_state=OperationalState.OPERATIONAL if engine_ready else OperationalState.UNAVAILABLE,
-                details="Bi-directional stateful 5-tuple flow tracking and TCP RFC 793/9293 state machine active" if engine_ready else "C++ flow tracker not compiled",
+                details="Bi-directional stateful 5-tuple flow tracking and TCP RFC 793/9293 state machine active"
+                if engine_ready
+                else "C++ flow tracker not compiled",
                 last_checked=now,
             ),
             "network_digital_twin": SubsystemReport(
@@ -62,6 +66,12 @@ class SubsystemService:
                 status=SubsystemState.OK,
                 operational_state=OperationalState.OPERATIONAL,
                 details="Protocol-aware test generation, differential fuzzing, and regression harness active in Phase 04.",
+                last_checked=now,
+            ),
+            "stateful_sequence_engine": SubsystemReport(
+                status=SubsystemState.OK,
+                operational_state=OperationalState.OPERATIONAL,
+                details="Stateful multi-packet sequence fuzzing, state transition verification, and regression promotion active in Phase 05.",
                 last_checked=now,
             ),
         }

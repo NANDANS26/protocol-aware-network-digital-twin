@@ -148,7 +148,7 @@ class ReproductionBundler:
             f"# Finding ID: {finding.finding_id}\n"
             "ENGINE_PATH=../../build/engine/protocol_engine\n"
             f"$ENGINE_PATH --input {fixture_path.name} --out events.jsonl --summary summary.json\n"
-            "echo \"Exit Code: $?\"\n"
+            'echo "Exit Code: $?"\n'
         )
 
         with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:

@@ -84,7 +84,9 @@ def test_phase04_complete_end_to_end_verification():
         assert mal_res.sanitizer_triggered is False
 
         # 7. Detect and persist a deliberately injected test-harness failure
-        harness_fault_res = runner.execute_fixture("e2e_case_fault", fpath, fault_injection="CRASH")
+        harness_fault_res = runner.execute_fixture(
+            "e2e_case_fault", fpath, fault_injection="CRASH"
+        )
         assert harness_fault_res.crash_detected is True
         assert harness_fault_res.passed is False
 
@@ -100,7 +102,7 @@ def test_phase04_complete_end_to_end_verification():
         )
         camp = service.create_campaign(dummy_camp)
 
-        unique_case_id = f"tc_e2e_{int(time.time()*1000)}"
+        unique_case_id = f"tc_e2e_{int(time.time() * 1000)}"
         dummy_tc = TestCase(
             case_id=unique_case_id,
             campaign_id=camp.campaign_id,
@@ -115,7 +117,7 @@ def test_phase04_complete_end_to_end_verification():
         )
         metadata_store.save_test_cases([dummy_tc])
 
-        finding_id = f"find_e2e_{int(time.time()*1000)}"
+        finding_id = f"find_e2e_{int(time.time() * 1000)}"
         e2e_finding = Finding(
             finding_id=finding_id,
             campaign_id=camp.campaign_id,
@@ -137,7 +139,9 @@ def test_phase04_complete_end_to_end_verification():
         )
         metadata_store.save_finding(e2e_finding)
 
-        regression_fixture = service.promote_to_regression(finding_id, "E2E Injected Crash Regression")
+        regression_fixture = service.promote_to_regression(
+            finding_id, "E2E Injected Crash Regression"
+        )
         assert regression_fixture is not None
         assert regression_fixture.finding_id == finding_id
         assert Path(regression_fixture.fixture_path).exists()

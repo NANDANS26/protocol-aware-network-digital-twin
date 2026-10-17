@@ -98,7 +98,9 @@ class ScenarioEngine:
                     explanation = f"Traffic from {q.source_ip} to {q.destination_ip}:{q.destination_port} became BLOCKED ({res_cf.reason_code.value})."
                 else:
                     change_type = "PATH_CHANGED"
-                    explanation = f"Reachability status transitioned from {res_base.status.value} to {res_cf.status.value}."
+                    explanation = (
+                        f"Reachability status transitioned from {res_base.status.value} to {res_cf.status.value}."
+                    )
 
                 reachability_diffs.append(
                     PathDifference(
@@ -131,7 +133,9 @@ class ScenarioEngine:
                     elif b_res.status.value == "FAIL" and c_res.status.value == "PASS":
                         exp = f"IMPROVEMENT: Security invariant '{inv.name}' changed from FAIL to PASS."
                     else:
-                        exp = f"Invariant '{inv.name}' status shifted from {b_res.status.value} to {c_res.status.value}."
+                        exp = (
+                            f"Invariant '{inv.name}' status shifted from {b_res.status.value} to {c_res.status.value}."
+                        )
 
                     invariant_diffs.append(
                         InvariantDifference(

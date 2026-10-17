@@ -43,9 +43,9 @@ async def test_intelligence_api_flow(test_app_client):
         import_req = {
             "format": "routing_table",
             "source_name": "lab-gateway",
-            "content": json.dumps([
-                {"destination": "192.168.10.0/24", "next_hop": "192.168.1.1", "interface": "eth0", "metric": "10"}
-            ]),
+            "content": json.dumps(
+                [{"destination": "192.168.10.0/24", "next_hop": "192.168.1.1", "interface": "eth0", "metric": "10"}]
+            ),
         }
         res = await client.post("/api/v1/imports", json=import_req)
         assert res.status_code == 200

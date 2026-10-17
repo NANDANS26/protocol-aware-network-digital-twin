@@ -115,6 +115,7 @@ class ReasonCode(StrEnum):
 
 # --- Interface & IP Assignment ---
 
+
 class IPAddressAssignment(BaseModel):
     ip_address: str
     prefix_length: int = Field(ge=0, le=128)
@@ -135,6 +136,7 @@ class ModelInterface(BaseModel):
 
 
 # --- Routing & Policies ---
+
 
 class RouteEntry(BaseModel):
     route_id: str
@@ -191,6 +193,7 @@ class NetworkZone(BaseModel):
 
 # --- Node in Model ---
 
+
 class ModelNodeType(StrEnum):
     HOST = "HOST"
     ROUTER = "ROUTER"
@@ -214,6 +217,7 @@ class ModelNode(BaseModel):
 
 
 # --- Model Limitations & Traceability ---
+
 
 class ModelLimitation(BaseModel):
     limitation_code: str
@@ -241,6 +245,7 @@ class NetworkModel(BaseModel):
 
 
 # --- Path & Query Representation ---
+
 
 class PathHop(BaseModel):
     hop_index: int
@@ -298,6 +303,7 @@ class ReachabilityResult(BaseModel):
 
 # --- Security Invariants ---
 
+
 class InvariantDefinition(BaseModel):
     # Depending on invariant_type:
     source_zone_or_cidr: str | None = None
@@ -346,6 +352,7 @@ class VerificationResult(BaseModel):
 
 
 # --- Counterfactual Scenarios ---
+
 
 class SimulationAction(BaseModel):
     action_type: SimulationActionType

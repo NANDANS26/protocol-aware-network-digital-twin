@@ -281,7 +281,9 @@ class VerificationEngine:
                             try:
                                 ip_obj = ipaddress.ip_address(ip_assign.ip_address)
                                 if ip_obj != svc_addr:
-                                    net = ipaddress.ip_network(f"{ip_assign.ip_address}/{ip_assign.prefix_length}", strict=False)
+                                    net = ipaddress.ip_network(
+                                        f"{ip_assign.ip_address}/{ip_assign.prefix_length}", strict=False
+                                    )
                                     is_diff_subnet = 1 if svc_addr not in net else 0
                                     score = (is_untrusted * 2) + is_diff_subnet
                                     candidates_list.append((score, ip_assign.ip_address))

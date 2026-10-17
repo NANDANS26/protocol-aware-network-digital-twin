@@ -48,11 +48,19 @@ def test_ethernet_and_vlan_generation():
     assert raw_eth[6:12] == bytes.fromhex("00AABBCCDDEE")
 
     # 802.1Q Single VLAN tag (0x8100, Priority 3, VID 100)
-    vlan_eth = make_ethernet_frame("00:11:22:33:44:55", "00:AA:BB:CC:DD:EE", 0x0800, b"payload", vlan_tags=[(0x8100, 3, 0, 100)])
+    vlan_eth = make_ethernet_frame(
+        "00:11:22:33:44:55", "00:AA:BB:CC:DD:EE", 0x0800, b"payload", vlan_tags=[(0x8100, 3, 0, 100)]
+    )
     assert len(vlan_eth) == 18 + len(b"payload")
 
     # 802.1ad Q-in-Q Double VLAN tags (0x88A8 outer, 0x8100 inner)
-    qinq_eth = make_ethernet_frame("00:11:22:33:44:55", "00:AA:BB:CC:DD:EE", 0x0800, b"payload", vlan_tags=[(0x88A8, 7, 0, 200), (0x8100, 0, 0, 100)])
+    qinq_eth = make_ethernet_frame(
+        "00:11:22:33:44:55",
+        "00:AA:BB:CC:DD:EE",
+        0x0800,
+        b"payload",
+        vlan_tags=[(0x88A8, 7, 0, 200), (0x8100, 0, 0, 100)],
+    )
     assert len(qinq_eth) == 22 + len(b"payload")
 
 
@@ -97,7 +105,13 @@ def test_tcp_generation_and_flag_combinations():
     assert tcp_syn[13] == 0x02  # SYN
 
     # XMAS scan segment (FIN + PSH + URG + SYN + RST + ACK + ECE + CWR)
-    tcp_xmas = make_tcp_segment(1234, 80, 100, 0, {"fin": True, "syn": True, "rst": True, "psh": True, "ack": True, "urg": True, "ece": True, "cwr": True})
+    tcp_xmas = make_tcp_segment(
+        1234,
+        80,
+        100,
+        0,
+        {"fin": True, "syn": True, "rst": True, "psh": True, "ack": True, "urg": True, "ece": True, "cwr": True},
+    )
     assert tcp_xmas[13] == 0xFF
 
 
@@ -155,7 +169,15 @@ def test_quic_classifier_generator():
 
 
 @pytest.mark.parametrize("target", list(ProtocolTarget))
-@pytest.mark.parametrize("strategy", [GenerationStrategy.BASELINE_CONFORMANCE, GenerationStrategy.MUTATION_FUZZING, GenerationStrategy.BOUNDARY_EDGE_CASES, GenerationStrategy.MALFORMED_INPUTS])
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        GenerationStrategy.BASELINE_CONFORMANCE,
+        GenerationStrategy.MUTATION_FUZZING,
+        GenerationStrategy.BOUNDARY_EDGE_CASES,
+        GenerationStrategy.MALFORMED_INPUTS,
+    ],
+)
 def test_all_protocol_targets_and_strategies_generate_cases(target, strategy):
     cases = generate_cases_for_target(target=target, strategy=strategy, seed=42, count=2)
     assert len(cases) == 2

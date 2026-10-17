@@ -1,6 +1,5 @@
 """Configuration management using Pydantic Settings."""
 
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,9 +17,7 @@ class AppSettings(BaseSettings):
     app_name: str = "Protocol-Aware Network Digital Twin & Security Verification Engine"
     app_version: str = "0.1.0"
     schema_version: str = "1.0.0"
-    environment: str = Field(
-        default="development", description="development, testing, staging, or production"
-    )
+    environment: str = Field(default="development", description="development, testing, staging, or production")
     debug: bool = False
 
     # Server settings

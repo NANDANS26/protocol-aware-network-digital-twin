@@ -115,7 +115,12 @@ def test_delta_minimizer_and_reproduction_bundler():
             "00:11:22:33:44:55",
             "00:AA:11:22:33:44",
             0x0800,
-            make_ipv4_packet("10.0.0.1", "10.0.0.2", 6, make_tcp_segment(1234, 80, 100, 0, {"syn": True}, payload=b"EXTRA_TRAILING_PAYLOAD" * 10)),
+            make_ipv4_packet(
+                "10.0.0.1",
+                "10.0.0.2",
+                6,
+                make_tcp_segment(1234, 80, 100, 0, {"syn": True}, payload=b"EXTRA_TRAILING_PAYLOAD" * 10),
+            ),
         )
         write_classic_pcap(pcap_path, [(1776412800, 0, frame)])
 
