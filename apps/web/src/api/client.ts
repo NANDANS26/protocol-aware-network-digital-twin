@@ -515,6 +515,68 @@ export class NetworkTwinApiClient {
     if (!res.ok) throw new Error(`Sequence bundle download failed: ${res.statusText}`);
     return res.blob();
   }
+
+  // --- Phase 06: Predictive Network World Model ---
+
+  async listPredictiveDatasets(): Promise<import('../types/predictive').DatasetManifest[]> {
+    return this.request<import('../types/predictive').DatasetManifest[]>('/predictive/datasets');
+  }
+
+  async extractPredictiveDataset(req: import('../types/predictive').DatasetExtractRequest): Promise<import('../types/predictive').DatasetManifest> {
+    return this.request<import('../types/predictive').DatasetManifest>('/predictive/datasets/extract', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async getPredictiveDataset(datasetId: string): Promise<import('../types/predictive').DatasetManifest> {
+    return this.request<import('../types/predictive').DatasetManifest>(`/predictive/datasets/${datasetId}`);
+  }
+
+  async trainPredictiveModel(req: import('../types/predictive').ModelTrainRequest): Promise<import('../types/predictive').ModelTrainingRun> {
+    return this.request<import('../types/predictive').ModelTrainingRun>('/predictive/train', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listPredictiveModels(): Promise<import('../types/predictive').ModelArtifact[]> {
+    return this.request<import('../types/predictive').ModelArtifact[]>('/predictive/models');
+  }
+
+  async getPredictiveModel(modelId: string): Promise<import('../types/predictive').ModelArtifact> {
+    return this.request<import('../types/predictive').ModelArtifact>(`/predictive/models/${modelId}`);
+  }
+
+  async predictBehavior(req: import('../types/predictive').PredictionRequest): Promise<import('../types/predictive').PredictionResult> {
+    return this.request<import('../types/predictive').PredictionResult>('/predictive/predict', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listPredictiveRecords(modelId?: string): Promise<import('../types/predictive').PredictionResult[]> {
+    const qs = modelId ? `?model_id=${encodeURIComponent(modelId)}` : '';
+    return this.request<import('../types/predictive').PredictionResult[]>(`/predictive/predictions${qs}`);
+  }
+
+  async evaluateScenarioConsensus(
+    scenarioId: string,
+    modelId?: string,
+    testProbePacket?: Record<string, unknown>
+  ): Promise<import('../types/predictive').ScenarioPredictionComparison> {
+    return this.request<import('../types/predictive').ScenarioPredictionComparison>(
+      `/predictive/scenarios/${scenarioId}/evaluate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ model_id: modelId, test_probe_packet: testProbePacket }),
+      }
+    );
+  }
+
+  async getPredictiveLimitations(): Promise<import('../types/predictive').PredictiveLimitationsResponse> {
+    return this.request<import('../types/predictive').PredictiveLimitationsResponse>('/predictive/limitations');
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();

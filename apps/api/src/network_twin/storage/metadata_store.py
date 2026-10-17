@@ -20,6 +20,11 @@ from network_twin.models.intelligence import (
     TopologyNode,
     TopologySnapshot,
 )
+from network_twin.predictive.models import (
+    DatasetManifest,
+    ModelArtifact,
+    PredictionResult,
+)
 from network_twin.simulation.models import (
     CounterfactualResult,
     NetworkModel,
@@ -46,7 +51,7 @@ from network_twin.testing.sequence_models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class MetadataStore:
@@ -89,6 +94,8 @@ class MetadataStore:
                 self._migrate_to_v3(conn)
             if current_version < 4:
                 self._migrate_to_v4(conn)
+            if current_version < 5:
+                self._migrate_to_v5(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -501,6 +508,54 @@ class MetadataStore:
 
             INSERT INTO schema_migrations (version, applied_at, description)
             VALUES (4, datetime('now'), 'Phase 05: Stateful Protocol Sequences, Findings, and Regressions');
+            """
+        )
+        conn.commit()
+
+    def _migrate_to_v5(self, conn: sqlite3.Connection):
+        """Schema v5: Predictive Network World Model, Datasets, Model Artifacts, and Predictions."""
+        logger.info("Applying Metadata Store Schema Migration v5...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS predictive_datasets (
+                dataset_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                pipeline_version TEXT NOT NULL,
+                time_window_sec REAL NOT NULL,
+                total_samples INTEGER NOT NULL,
+                feature_count INTEGER NOT NULL,
+                target_type TEXT NOT NULL,
+                hash_sha256 TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                manifest_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS model_artifacts (
+                model_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                target TEXT NOT NULL,
+                algorithm TEXT NOT NULL,
+                dataset_id TEXT NOT NULL REFERENCES predictive_datasets(dataset_id) ON DELETE CASCADE,
+                artifact_path TEXT NOT NULL,
+                artifact_hash_sha256 TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                artifact_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS prediction_records (
+                prediction_id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL REFERENCES model_artifacts(model_id) ON DELETE CASCADE,
+                target TEXT NOT NULL,
+                predicted_value REAL NOT NULL,
+                predicted_at TEXT NOT NULL,
+                result_json TEXT NOT NULL
+            );
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (5, datetime('now'), 'Phase 06: Predictive Network World Model, Datasets, Model Artifacts, and Predictions');
             """
         )
         conn.commit()
@@ -2099,6 +2154,141 @@ class MetadataStore:
                     data["last_run_iso"] = last_run_at
                 regressions.append(SequenceRegressionFixture.model_validate(data))
             return regressions
+
+    # --- Phase 06: Predictive World Model, Datasets, Artifacts, Predictions ---
+
+    def save_dataset_manifest(self, manifest: DatasetManifest) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO predictive_datasets (
+                    dataset_id, name, description, pipeline_version,
+                    time_window_sec, total_samples, feature_count,
+                    target_type, hash_sha256, created_at, manifest_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(dataset_id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    total_samples = excluded.total_samples,
+                    manifest_json = excluded.manifest_json;
+                """,
+                (
+                    manifest.dataset_id,
+                    manifest.name,
+                    manifest.description,
+                    manifest.pipeline_version,
+                    manifest.time_window_sec,
+                    manifest.total_samples,
+                    manifest.feature_count,
+                    str(manifest.target_type),
+                    manifest.hash_sha256,
+                    manifest.created_at_iso,
+                    manifest.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_dataset_manifest(self, dataset_id: str) -> DatasetManifest | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT manifest_json FROM predictive_datasets WHERE dataset_id = ?;",
+                (dataset_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return DatasetManifest.model_validate_json(row["manifest_json"])
+
+    def list_dataset_manifests(self) -> list[DatasetManifest]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT manifest_json FROM predictive_datasets ORDER BY created_at DESC;")
+            manifests = []
+            for row in cur.fetchall():
+                manifests.append(DatasetManifest.model_validate_json(row["manifest_json"]))
+            return manifests
+
+    def save_model_artifact(self, artifact: ModelArtifact) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO model_artifacts (
+                    model_id, name, version, target, algorithm,
+                    dataset_id, artifact_path, artifact_hash_sha256,
+                    created_at, artifact_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(model_id) DO UPDATE SET
+                    name = excluded.name,
+                    artifact_json = excluded.artifact_json;
+                """,
+                (
+                    artifact.model_id,
+                    artifact.name,
+                    artifact.version,
+                    str(artifact.target),
+                    str(artifact.algorithm),
+                    artifact.dataset_id,
+                    artifact.artifact_path,
+                    artifact.artifact_hash_sha256,
+                    artifact.created_at_iso,
+                    artifact.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_model_artifact(self, model_id: str) -> ModelArtifact | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT artifact_json FROM model_artifacts WHERE model_id = ?;",
+                (model_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return ModelArtifact.model_validate_json(row["artifact_json"])
+
+    def list_model_artifacts(self) -> list[ModelArtifact]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT artifact_json FROM model_artifacts ORDER BY created_at DESC;")
+            artifacts = []
+            for row in cur.fetchall():
+                artifacts.append(ModelArtifact.model_validate_json(row["artifact_json"]))
+            return artifacts
+
+    def save_prediction_record(self, prediction: PredictionResult) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO prediction_records (
+                    prediction_id, model_id, target, predicted_value,
+                    predicted_at, result_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(prediction_id) DO UPDATE SET
+                    result_json = excluded.result_json;
+                """,
+                (
+                    prediction.prediction_id,
+                    prediction.model_id,
+                    str(prediction.target),
+                    prediction.predicted_value,
+                    prediction.predicted_at_iso,
+                    prediction.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def list_prediction_records(self, model_id: str | None = None) -> list[PredictionResult]:
+        with self._get_connection() as conn:
+            if model_id:
+                cur = conn.execute(
+                    "SELECT result_json FROM prediction_records WHERE model_id = ? ORDER BY predicted_at DESC;",
+                    (model_id,),
+                )
+            else:
+                cur = conn.execute("SELECT result_json FROM prediction_records ORDER BY predicted_at DESC;")
+            records = []
+            for row in cur.fetchall():
+                records.append(PredictionResult.model_validate_json(row["result_json"]))
+            return records
 
 
 metadata_store = MetadataStore()

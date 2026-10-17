@@ -1,12 +1,12 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 04 Security Testing & Fuzzing](https://img.shields.io/badge/Phase%2004-Fuzzing%20%26%20Testing%20Verified-brightgreen)](#)
+[![Phase 06 Predictive World Model](https://img.shields.io/badge/Phase%2006-Predictive%20World%20Model%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, and isolated protocol fuzzing.
+An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, and predictive network world modeling.
 
 ---
 
@@ -21,24 +21,25 @@ The platform provides a unified system combining low-latency systems software wi
 5. **Deterministic Security-Property Verification**: Formal invariant checking and automated counterexample generation.
 6. **Counterfactual Network Simulation**: Predictive "what-if" testing on digital twin snapshots prior to change execution.
 7. **Isolated Protocol Fuzzing & Differential Testing**: Deep parser verification, metamorphic testing, and automated delta minimization.
-8. **Constrained AI Investigation Agents**: Evidence-grounded agents with cryptographic proof linkages.
-9. **Learned Network World Model**: Evaluated against deterministic verification baselines.
-10. **Professional React Engineering Workstation**: High-density dark engineering visual shell and telemetry cockpit.
+8. **Stateful Protocol Sequence Testing**: Multi-packet state-machine fuzzing, TCP transition checking, and differential testing.
+9. **Predictive Network World Model**: Time-windowed feature extraction, baseline comparison, 90% conformal uncertainty intervals, Out-of-Distribution (OOD) distance gating, and deterministic ground-truth supremacy consensus.
+10. **Professional React Engineering Workstation**: High-density dark engineering visual shell, predictive workbench, and telemetry cockpit.
 
 ---
 
-## 2. Current Implementation Status (Phase 04 Operational)
+## 2. Current Implementation Status (Phase 06 Operational)
 
-Phase 04 establishes a reproducible protocol security testing and differential fuzzing subsystem:
+Phase 06 introduces a learned predictive network world model operating alongside deterministic verification:
 
-- **Protocol Test Generation & Mutation**: Deterministic generators and mutation operators for Ethernet, VLAN, IPv4, IPv6, TCP, UDP, DNS, HTTP/1.1, TLS ClientHello, and QUIC.
-- **Offline C++ Execution Harness**: Safe subprocess sandbox executing `protocol_engine.exe` with bounded timeouts, ASan and Windows crash code detection (`0xC0000005`, `0xC0000409`), Draft 2020-12 JSONL schema validation, and fault injection.
-- **Differential & Metamorphic Testing**: Equivalence testing across PCAP and PCAPNG encodings, metamorphic payload padding invariance, and port shift tests.
-- **Delta Debugging Minimizer & Bundler**: Automated payload minimizer trimming non-essential bytes while preserving crash/discrepancy signatures, plus export of self-contained reproduction ZIP bundles with PowerShell/Bash scripts.
-- **Persistent Evidence & Regression Ledger**: SQLite catalog with Schema Migration v3 storing test campaigns, cases, results, findings, and permanent regression fixtures.
-- **Security Testing REST API**: 15 endpoints under `/api/v1/testing` for campaign orchestration, test case inspection, defect triage, delta minimization, and bundle export.
-- **React Security Testing Workbench**: Interactive workstation (`SecurityTestingWorkbench.tsx`) accessible via dedicated "Protocol Research Lab" tab and Network Twin "Security Testing & Fuzzing" tab.
-- **Full Automated Quality Gates**: 109 pytest tests, 17 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
+- **Versioned Feature Extraction Pipeline**: Zero-leakage time-windowed numeric feature extraction from flows, packets, and topology snapshots without raw payload retention.
+- **Baseline Comparison & Calibrated Models**: Persistence and Moving Average baseline models evaluated against Ridge, Logistic Regression, and Random Forest models on future prediction targets.
+- **Empirical 90% Conformal Uncertainty Intervals**: Conformal calibration yielding bounded intervals `[lower, upper]` with empirical coverage guarantees.
+- **Out-of-Distribution (OOD) Distance Gating**: Mahalanobis distance gating classifying predictions as High Reliability, Moderate Uncertainty, or Out-of-Distribution.
+- **Scenario Consensus Harmonizer**: Consensus engine joining statistical behavior forecasts with deterministic simulation traces under strict ground-truth supremacy (a learned model never overrides a formal security invariant).
+- **Relational Persistence**: SQLite catalog with Schema Migration v5 storing datasets, model artifacts, and prediction records.
+- **Predictive World Model REST API**: 10 endpoints under `/api/v1/predictive` for dataset creation, model training, evaluation vs baselines, inference, and scenario evaluation.
+- **React Predictive Workbench**: Dedicated workbench tab (`PredictiveWorkbench.tsx`) inside the Network Twin workstation for dataset inspection, model comparison, live calibrated inference, scenario consensus, and methodological rules.
+- **Full Automated Quality Gates**: 149 pytest tests, 26 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
 
 See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
 

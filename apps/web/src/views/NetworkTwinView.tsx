@@ -29,6 +29,7 @@ import { SecurityVerificationView } from './twin/SecurityVerificationView';
 import { CounterfactualScenarioView } from './twin/CounterfactualScenarioView';
 import { ModelInspectorView } from './twin/ModelInspectorView';
 import { SecurityTestingWorkbench } from './twin/SecurityTestingWorkbench';
+import { PredictiveWorkbench } from './twin/PredictiveWorkbench';
 import {
   Server,
   Network,
@@ -50,6 +51,7 @@ import {
   Route,
   Activity,
   Bug,
+  TrendingUp,
 } from 'lucide-react';
 
 export type TwinTab =
@@ -60,6 +62,7 @@ export type TwinTab =
   | 'counterfactual'
   | 'models'
   | 'fuzzing'
+  | 'predictive'
   | 'evidence'
   | 'comparison'
   | 'imports';
@@ -648,6 +651,21 @@ export const NetworkTwinView: React.FC = () => {
         >
           <Bug className="w-3.5 h-3.5 text-rose-400" />
           <span>Security Testing & Fuzzing</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('predictive')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'predictive'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
+          <span>Predictive World Model</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-950 text-blue-300 border border-blue-800">
+            Phase 06
+          </span>
         </button>
 
         <button
@@ -1710,6 +1728,11 @@ export const NetworkTwinView: React.FC = () => {
       {/* TAB CONTENT: PROTOCOL SECURITY TESTING & FUZZING */}
       {activeTab === 'fuzzing' && (
         <SecurityTestingWorkbench />
+      )}
+
+      {/* TAB CONTENT: PREDICTIVE WORLD MODEL & BEHAVIOR FORECASTING */}
+      {activeTab === 'predictive' && (
+        <PredictiveWorkbench />
       )}
 
       {/* Snapshot Creation Modal */}

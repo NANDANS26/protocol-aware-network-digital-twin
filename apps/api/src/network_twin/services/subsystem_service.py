@@ -74,6 +74,12 @@ class SubsystemService:
                 details="Stateful multi-packet sequence fuzzing, state transition verification, and regression promotion active in Phase 05.",
                 last_checked=now,
             ),
+            "predictive_world_model": SubsystemReport(
+                status=SubsystemState.OK,
+                operational_state=OperationalState.OPERATIONAL,
+                details="Predictive network behavior forecasting, conformal uncertainty assessment, and scenario evaluation active in Phase 06.",
+                last_checked=now,
+            ),
         }
 
         # Check Database dependency if configured
