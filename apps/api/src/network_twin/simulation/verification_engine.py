@@ -206,7 +206,21 @@ class VerificationEngine:
                 destination_port=service_port,
             )
             reach = self.forwarding.evaluate_reachability(model, query)
-            if reach.status != ReachabilityStatus.REACHABLE:
+            if reach.status == ReachabilityStatus.INDETERMINATE:
+                return VerificationResult(
+                    result_id=f"ver-{uuid.uuid4().hex[:12]}",
+                    invariant_id=invariant.invariant_id,
+                    invariant_name=invariant.name,
+                    invariant_type=invariant.invariant_type,
+                    severity=invariant.severity,
+                    status=InvariantStatus.INDETERMINATE,
+                    reason_code="ROUTING_INDETERMINATE",
+                    explanation=f"Required service reachability could not be conclusively determined from {src_ip}: {reach.explanation}",
+                    model_id=model.model_id,
+                    model_fingerprint=model.fingerprint,
+                    limitations=reach.limitations,
+                )
+            elif reach.status != ReachabilityStatus.REACHABLE:
                 return VerificationResult(
                     result_id=f"ver-{uuid.uuid4().hex[:12]}",
                     invariant_id=invariant.invariant_id,
@@ -320,6 +334,20 @@ class VerificationEngine:
                     model_id=model.model_id,
                     model_fingerprint=model.fingerprint,
                 )
+            elif reach.status == ReachabilityStatus.INDETERMINATE:
+                return VerificationResult(
+                    result_id=f"ver-{uuid.uuid4().hex[:12]}",
+                    invariant_id=invariant.invariant_id,
+                    invariant_name=invariant.name,
+                    invariant_type=invariant.invariant_type,
+                    severity=invariant.severity,
+                    status=InvariantStatus.INDETERMINATE,
+                    reason_code="ROUTING_INDETERMINATE",
+                    explanation=f"Could not conclusively verify port restriction on port {port}: {reach.explanation}",
+                    model_id=model.model_id,
+                    model_fingerprint=model.fingerprint,
+                    limitations=reach.limitations,
+                )
 
         return VerificationResult(
             result_id=f"ver-{uuid.uuid4().hex[:12]}",
@@ -396,6 +424,20 @@ class VerificationEngine:
                 model_id=model.model_id,
                 model_fingerprint=model.fingerprint,
             )
+        elif reach.status == ReachabilityStatus.INDETERMINATE:
+            return VerificationResult(
+                result_id=f"ver-{uuid.uuid4().hex[:12]}",
+                invariant_id=invariant.invariant_id,
+                invariant_name=invariant.name,
+                invariant_type=invariant.invariant_type,
+                severity=invariant.severity,
+                status=InvariantStatus.INDETERMINATE,
+                reason_code="ROUTING_INDETERMINATE",
+                explanation=f"Could not conclusively verify management plane isolation: {reach.explanation}",
+                model_id=model.model_id,
+                model_fingerprint=model.fingerprint,
+                limitations=reach.limitations,
+            )
 
         return VerificationResult(
             result_id=f"ver-{uuid.uuid4().hex[:12]}",
@@ -444,7 +486,21 @@ class VerificationEngine:
         )
         reach = self.forwarding.evaluate_reachability(model, query)
 
-        if reach.status != ReachabilityStatus.REACHABLE:
+        if reach.status == ReachabilityStatus.INDETERMINATE:
+            return VerificationResult(
+                result_id=f"ver-{uuid.uuid4().hex[:12]}",
+                invariant_id=invariant.invariant_id,
+                invariant_name=invariant.name,
+                invariant_type=invariant.invariant_type,
+                severity=invariant.severity,
+                status=InvariantStatus.INDETERMINATE,
+                reason_code="ROUTING_INDETERMINATE",
+                explanation=f"Cannot evaluate path constraints because reachability is indeterminate: {reach.explanation}",
+                model_id=model.model_id,
+                model_fingerprint=model.fingerprint,
+                limitations=reach.limitations,
+            )
+        elif reach.status != ReachabilityStatus.REACHABLE:
             return VerificationResult(
                 result_id=f"ver-{uuid.uuid4().hex[:12]}",
                 invariant_id=invariant.invariant_id,
@@ -552,6 +608,20 @@ class VerificationEngine:
                     model_id=model.model_id,
                     model_fingerprint=model.fingerprint,
                 )
+            elif reach.status == ReachabilityStatus.INDETERMINATE:
+                return VerificationResult(
+                    result_id=f"ver-{uuid.uuid4().hex[:12]}",
+                    invariant_id=invariant.invariant_id,
+                    invariant_name=invariant.name,
+                    invariant_type=invariant.invariant_type,
+                    severity=invariant.severity,
+                    status=InvariantStatus.INDETERMINATE,
+                    reason_code="ROUTING_INDETERMINATE",
+                    explanation=f"Could not conclusively verify forbidden exposure from {u_ip}: {reach.explanation}",
+                    model_id=model.model_id,
+                    model_fingerprint=model.fingerprint,
+                    limitations=reach.limitations,
+                )
 
         return VerificationResult(
             result_id=f"ver-{uuid.uuid4().hex[:12]}",
@@ -565,6 +635,33 @@ class VerificationEngine:
             model_id=model.model_id,
             model_fingerprint=model.fingerprint,
         )
+
+    @staticmethod
+    def _is_prefix_contained(child_prefix: str | None, parent_prefix: str | None) -> bool:
+        if parent_prefix is None or parent_prefix in ("0.0.0.0/0", "::/0", "ANY"):
+            return True
+        if child_prefix is None or child_prefix in ("0.0.0.0/0", "::/0", "ANY"):
+            return False
+        try:
+            child_net = ipaddress.ip_network(child_prefix, strict=False)
+            parent_net = ipaddress.ip_network(parent_prefix, strict=False)
+            if child_net.version != parent_net.version:
+                return False
+            return child_net.subnet_of(parent_net)
+        except (ValueError, TypeError):
+            return False
+
+    @staticmethod
+    def _is_port_contained(child_port: int | None, parent_port: int | None) -> bool:
+        if parent_port is None:
+            return True
+        return child_port == parent_port
+
+    @staticmethod
+    def _is_proto_contained(child_proto: TransportProtocolConstraint, parent_proto: TransportProtocolConstraint) -> bool:
+        if parent_proto == TransportProtocolConstraint.ANY:
+            return True
+        return child_proto == parent_proto
 
     def _verify_configuration_consistency(
         self,
@@ -597,17 +694,38 @@ class VerificationEngine:
                         anomalies.append(
                             f"Node '{node.label}': Invalid next-hop IP syntax '{r.next_hop_ip}' in route {r.route_id}."
                         )
+                    for iface in node.interfaces:
+                        for assign in iface.ip_assignments:
+                            if assign.ip_address == r.next_hop_ip:
+                                anomalies.append(
+                                    f"Node '{node.label}': Route {r.route_id} ({r.destination_prefix}) has self-referencing next-hop IP {r.next_hop_ip}."
+                                )
 
-            # Check ACL rule overlap / contradictions
+            # Check ACL rule overlap, redundancy, and shadowing
             for acl in node.acls:
                 seen_rules: set[str] = set()
-                for rule in acl.rules:
+                for i, rule in enumerate(acl.rules):
                     rule_key = f"{rule.direction.value}-{rule.protocol.value}-{rule.source_prefix}-{rule.destination_prefix}-{rule.destination_port}"
                     if rule_key in seen_rules:
                         anomalies.append(
-                            f"Node '{node.label}', ACL '{acl.name}': Redundant or shadowed rule {rule.rule_id} for {rule_key}."
+                            f"Node '{node.label}', ACL '{acl.name}': Redundant rule {rule.rule_id} for {rule_key}."
                         )
                     seen_rules.add(rule_key)
+
+                    # Subnet and port shadowing check against preceding rules
+                    for prev_rule in acl.rules[:i]:
+                        if prev_rule.direction != rule.direction:
+                            continue
+                        if (
+                            self._is_proto_contained(rule.protocol, prev_rule.protocol)
+                            and self._is_port_contained(rule.destination_port, prev_rule.destination_port)
+                            and self._is_prefix_contained(rule.source_prefix, prev_rule.source_prefix)
+                            and self._is_prefix_contained(rule.destination_prefix, prev_rule.destination_prefix)
+                        ):
+                            anomalies.append(
+                                f"Node '{node.label}', ACL '{acl.name}': Rule {rule.rule_id} is shadowed by earlier broader rule {prev_rule.rule_id}."
+                            )
+                            break
 
         if anomalies:
             return VerificationResult(

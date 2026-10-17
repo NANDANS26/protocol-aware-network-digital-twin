@@ -308,6 +308,28 @@ class ForwardingEngine:
 
             evidence_ids.update(selected_route.source_evidence_ids)
 
+            # Check if output interface is down
+            if selected_route.output_interface_id:
+                iface = next(
+                    (i for i in current_node.interfaces if i.interface_id == selected_route.output_interface_id),
+                    None,
+                )
+                if iface and iface.state.value == "DOWN":
+                    return ReachabilityResult(
+                        query_id=query_id,
+                        model_id=model.model_id,
+                        model_fingerprint=model.fingerprint,
+                        source_ip=query.source_ip,
+                        destination_ip=query.destination_ip,
+                        protocol=query.protocol,
+                        destination_port=query.destination_port,
+                        status=ReachabilityStatus.BLOCKED,
+                        reason_code=ReasonCode.INTERFACE_DOWN,
+                        path=path,
+                        explanation=f"Output interface '{iface.name}' ({iface.interface_id}) on node '{current_node.label}' is administratively DOWN.",
+                        evidence_ids=sorted(list(evidence_ids)),
+                    )
+
             # Route resolution: Connected link vs Next-Hop
             if selected_route.route_type.value == "CONNECTED" or not selected_route.next_hop_ip:
                 # Destination is on local link of current node
@@ -317,6 +339,7 @@ class ForwardingEngine:
                             hop_index=hop_index,
                             node_id=current_node.node_id,
                             node_label=current_node.label,
+                            egress_interface=selected_route.output_interface_id,
                             routed_destination_prefix=selected_route.destination_prefix,
                             notes=f"Directly connected to destination network {selected_route.destination_prefix}",
                         )
@@ -331,6 +354,7 @@ class ForwardingEngine:
                             hop_index=hop_index,
                             node_id=current_node.node_id,
                             node_label=current_node.label,
+                            egress_interface=selected_route.output_interface_id,
                             routed_destination_prefix=selected_route.destination_prefix,
                             notes="Destination IP matches connected subnet; target host unmodeled",
                         )
@@ -374,6 +398,23 @@ class ForwardingEngine:
                     ),
                 )
 
+            # Detect self-referencing next-hop loops
+            if self._node_owns_ip(current_node, next_hop_addr):
+                return ReachabilityResult(
+                    query_id=query_id,
+                    model_id=model.model_id,
+                    model_fingerprint=model.fingerprint,
+                    source_ip=query.source_ip,
+                    destination_ip=query.destination_ip,
+                    protocol=query.protocol,
+                    destination_port=query.destination_port,
+                    status=ReachabilityStatus.BLOCKED,
+                    reason_code=ReasonCode.FORWARDING_LOOP_DETECTED,
+                    path=path,
+                    explanation=f"Self-referencing next-hop loop detected: Route on node '{current_node.label}' points next-hop {selected_route.next_hop_ip} to its own interface.",
+                    evidence_ids=sorted(list(evidence_ids)),
+                )
+
             next_node = self._find_node_by_ip(model, next_hop_addr)
             if not next_node:
                 return ReachabilityResult(
@@ -396,6 +437,7 @@ class ForwardingEngine:
                     hop_index=hop_index,
                     node_id=current_node.node_id,
                     node_label=current_node.label,
+                    egress_interface=selected_route.output_interface_id,
                     routed_destination_prefix=selected_route.destination_prefix,
                     next_hop_ip=selected_route.next_hop_ip,
                     notes=f"LPM route match: {selected_route.destination_prefix} via {selected_route.next_hop_ip}",
@@ -436,7 +478,7 @@ class ForwardingEngine:
                 net = ipaddress.ip_network(route.destination_prefix, strict=False)
                 if dst_addr in net:
                     matching_routes.append(route)
-            except ValueError:
+            except (ValueError, TypeError):
                 continue
 
         if not matching_routes:
@@ -493,7 +535,7 @@ class ForwardingEngine:
                         src_net = ipaddress.ip_network(rule.source_prefix, strict=False)
                         if src_addr not in src_net:
                             continue
-                    except ValueError:
+                    except (ValueError, TypeError):
                         continue
 
                 # Match destination prefix
@@ -502,7 +544,7 @@ class ForwardingEngine:
                         dst_net = ipaddress.ip_network(rule.destination_prefix, strict=False)
                         if dst_addr not in dst_net:
                             continue
-                    except ValueError:
+                    except (ValueError, TypeError):
                         continue
 
                 # First match

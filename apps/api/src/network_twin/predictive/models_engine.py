@@ -167,6 +167,9 @@ class ModelTrainer:
         if actual_dataset is None:
             raise ValueError("A dataset or manifest must be provided for model training.")
 
+        if not (0.05 <= test_ratio <= 0.5):
+            raise ValueError(f"Invalid test_ratio {test_ratio}. Must be between 0.05 and 0.5.")
+
         start_time = datetime.datetime.now(datetime.UTC)
         samples = actual_dataset.dataset_samples
         if len(samples) < 4:
@@ -179,10 +182,21 @@ class ModelTrainer:
 
         # 1. STRICT TEMPORAL SPLIT (No random shuffling to prevent data leakage)
         split_idx = max(2, int(len(samples) * (1.0 - test_ratio)))
+        if split_idx >= len(samples):
+            split_idx = len(samples) - 1
         X_train, X_test = X_all[:split_idx], X_all[split_idx:]
         y_train, y_test = y_all[:split_idx], y_all[split_idx:]
 
+        if len(X_test) == 0:
+            raise ValueError("Evaluation split is empty. Provide a larger dataset or adjust test_ratio.")
+
         is_classification = effective_target == PredictionTarget.RELATIONSHIP_PERSISTENCE
+        if is_classification:
+            unique_classes = np.unique(y_train.astype(int))
+            if len(unique_classes) < 2:
+                raise ValueError(
+                    f"Classification target requires at least 2 distinct classes in training split, found {len(unique_classes)}."
+                )
 
         # 2. EVALUATE NAIVE BASELINES
         # Persistence Baseline: y_{t+1} = y_t

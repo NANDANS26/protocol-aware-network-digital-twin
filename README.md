@@ -1,12 +1,12 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 07 Reproducible Validation & Benchmarking](https://img.shields.io/badge/Phase%2007-Validation%20%26%20Benchmarking%20Verified-brightgreen)](#)
+[![Phase 08 Adversarial Hardening & Verification](https://img.shields.io/badge/Phase%2008-Adversarial%20Hardening%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, and reproducible end-to-end benchmarking.
+An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, reproducible end-to-end benchmarking, and adversarial verification hardening.
 
 ---
 
@@ -24,25 +24,26 @@ The platform provides a unified system combining low-latency systems software wi
 8. **Stateful Protocol Sequence Testing**: Multi-packet state-machine fuzzing, TCP transition checking, and differential testing.
 9. **Predictive Network World Model**: Time-windowed feature extraction, baseline comparison, 90% conformal uncertainty intervals, Out-of-Distribution (OOD) distance gating, and deterministic ground-truth supremacy consensus.
 10. **Reproducible Validation & Benchmarking**: End-to-end pipeline audit, ground-truth supremacy verification, versioned dataset fixtures, and empirical resource profiling.
-11. **Professional React Engineering Workstation**: High-density dark engineering visual shell, benchmark workbench, predictive workbench, and telemetry cockpit.
+11. **Adversarial Verification & Trustworthy Hardening**: Independent hand-verifiable oracles, snapshot immutability, elimination of false PASS on unresolved evidence, true subnet and port ACL shadowing detection, and parser resilience.
+12. **Professional React Engineering Workstation**: High-density dark engineering visual shell, adversarial hardening workbench, benchmark workbench, predictive workbench, and telemetry cockpit.
 
 ---
 
-## 2. Current Implementation Status (Phase 07 Operational)
+## 2. Current Implementation Status (Phase 08 Operational)
 
-Phase 07 establishes comprehensive end-to-end verification, ground-truth supremacy, and reproducible benchmarking across the entire twin pipeline:
+Phase 08 discovers, demonstrates, and rectifies semantic correctness failures across the entire twin pipeline:
 
-- **End-to-End Twin Data Path Audit**: Comprehensive ground-truth audit report (`docs/audits/phase07_twin_audit.md`) tracing PCAP bytes through decoding, canonical events, Parquet store, topology reconstruction, deterministic simulation, ML feature extraction, conformal predictions, consensus harmonizer, and React UI.
-- **Deterministic Benchmark Runner**: Multi-stage benchmark suite evaluating versioned dataset fixtures (`handshake-core`, `public-sample-pcap`, `dns-service-resolution`, `security-ssh-violation`, `empty-malformed-edge`, `scale-profiling-workload`) with explicit provenance tagging (`REAL_CAPTURE`, `PUBLIC_CAPTURE`, `SYNTHETIC_FIXTURE`).
-- **Ground-Truth Supremacy Verification**: Mathematical guarantee and proof that deterministic packet forwarding and security invariants supersede statistical predictions. Zero false positives on legitimate handshakes; zero false negatives on adversarial ACL drops.
-- **Baseline Comparison & Conformal Calibration**: Machine learning forecasts evaluated against persistence baselines with sample counts ($N$), 90% conformal coverage, and Mahalanobis Out-of-Distribution (OOD) distance gating.
-- **Empirical Resource & Throughput Profiling**: Real heap memory tracking (`tracemalloc`), CPU process time, wall latency, and C++ offline parser throughput (packets/sec and Mbps).
-- **Relational Persistence**: SQLite catalog with Schema Migration v6 storing `benchmark_runs` and `benchmark_metrics`.
-- **Benchmarking REST API**: 5 endpoints under `/api/v1/benchmarks` (`GET /fixtures`, `POST /run`, `GET /runs`, `GET /runs/{id}`, and `GET /summary`).
-- **React Benchmark Workbench**: Dedicated workbench tab (`BenchmarkWorkbench.tsx`) inside the Network Twin workstation for fixture inspection, execution log, multi-stage deep dives, and truthfulness standards.
-- **Full Automated Quality Gates**: 156 pytest tests, 32 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
+- **Independent Hand-Verifiable Oracles**: Dedicated hardening subsystem (`apps/api/src/network_twin/hardening/`) with 10 deterministic test cases across 6 disciplines (`ROUTING_FORWARDING`, `SECURITY_ISOLATION`, `CONFIG_CONSISTENCY`, `PARSER_RESILIENCE`, `PREDICTIVE_INTEGRITY`, `METAMORPHIC_INVARIANCE`).
+- **Elimination of False PASS**: Formal security verification hardened against incomplete or unmodeled evidence; all invariant checks strictly return `INDETERMINATE` with `ROUTING_INDETERMINATE` when reachability is inconclusive, eliminating unproven false confidence.
+- **Routing & Forwarding Hardening**: Rectified cross-IP version mismatch exceptions, enforced administrative `DOWN` interface state blocking, detected self-referencing next-hop loops (`FORWARDING_LOOP_DETECTED`), and populated egress interface attribution on path hops.
+- **True Subnet & Port ACL Shadowing**: Implemented algorithmic CIDR containment, transport protocol overlap, and port containment checking to catch superset deny rules shadowing subsequent subset permit rules.
+- **C++ Systems Engine Non-Initial Fragment Resilience**: Hardened `analysis_pipeline.cpp` so non-initial IPv4/IPv6 fragments (`fragment_offset > 0`) bypass L4 TCP/UDP decoders without corrupting flow state.
+- **Predictive World Model Split Protections**: Bounded train/test ratios ($0.05 \le \text{test\_ratio} \le 0.5$) and rejected datasets with $< 4$ samples or single-class degenerate targets.
+- **Adversarial Hardening REST API**: 4 endpoints under `/api/v1/twin/hardening` (`GET /cases`, `POST /run`, `GET /latest`, and `GET /runs/{run_id}`).
+- **React Adversarial Hardening Workbench**: Dedicated workbench tab (`AdversarialHardeningWorkbench.tsx`) featuring oracle catalog, category filters, hand-verifiable mathematical rationale, live execution telemetry, expected-vs-observed outcome diffs, and audit trail ledger.
+- **Comprehensive Quality Gates**: 151 passed pytest tests (0 failures), 36 passed Vitest tests (0 failures), 100% C++ engine tests (26 doctest cases / 183 assertions), strict TypeScript (`tsc --noEmit`), and Ruff linting (0 errors).
 
-See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
+See [docs/status/implementation-status.md](docs/status/implementation-status.md) and [docs/audits/phase08_hardening_audit.md](docs/audits/phase08_hardening_audit.md) for full audit reports.
 
 ---
 

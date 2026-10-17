@@ -20,6 +20,7 @@ from network_twin.simulation.models import (
     FilterStatefulness,
     FirewallRule,
     InvariantDifference,
+    IPAddressAssignment,
     NetworkModel,
     PathDifference,
     ReachabilityQuery,
@@ -215,10 +216,15 @@ class ScenarioEngine:
             if not route_id and not dest:
                 raise ValueError(f"Action #{action_index}: Either 'route_id' or 'destination_prefix' is required.")
 
+            def _should_keep_route(r: RouteEntry) -> bool:
+                if route_id and r.route_id == route_id:
+                    return False
+                if dest and r.destination_prefix == dest:
+                    return False
+                return True
+
             target_node.routing_table = [
-                r
-                for r in target_node.routing_table
-                if (route_id and r.route_id != route_id) and (dest and r.destination_prefix != dest)
+                r for r in target_node.routing_table if _should_keep_route(r)
             ]
 
         elif action.action_type == SimulationActionType.MODIFY_ROUTE:
@@ -309,8 +315,16 @@ class ScenarioEngine:
 
             for iface in target_node.interfaces:
                 if iface.interface_id == iface_id or not iface_id:
-                    iface.ip_assignments[0].ip_address = new_ip
-                    iface.ip_assignments[0].prefix_length = new_prefix
+                    if iface.ip_assignments:
+                        iface.ip_assignments[0].ip_address = new_ip
+                        iface.ip_assignments[0].prefix_length = new_prefix
+                    else:
+                        iface.ip_assignments.append(
+                            IPAddressAssignment(
+                                ip_address=new_ip,
+                                prefix_length=new_prefix,
+                            )
+                        )
                     break
 
         elif action.action_type == SimulationActionType.SET_INTERFACE_STATE:

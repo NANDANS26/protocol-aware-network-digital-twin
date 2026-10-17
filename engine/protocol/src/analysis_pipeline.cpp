@@ -208,7 +208,19 @@ AnalysisReport AnalysisPipeline::run() {
                         network_layer_json = nl.str();
 
                         // 3. Transport Layer
-                        if (ip4.protocol == 6) { // TCP
+                        if (ip4.is_fragment && ip4.fragment_offset > 0) {
+                            report.protocol_counts["IPv4-Fragment"]++;
+                            std::ostringstream tl;
+                            tl << "{\"protocol\":\"Fragment\","
+                               << "\"source_port\":null,"
+                               << "\"destination_port\":null,"
+                               << "\"tcp_sequence_number\":null,"
+                               << "\"tcp_acknowledgment_number\":null,"
+                               << "\"tcp_flags\":null,"
+                               << "\"window_size\":null,"
+                               << "\"fragment_offset\":" << ip4.fragment_offset << "}";
+                            transport_layer_json = tl.str();
+                        } else if (ip4.protocol == 6) { // TCP
                             decoders::DecodedTcp tcp;
                             std::string tcp_diag;
                             decoders::DecodeResult tcp_res = decoders::TcpDecoder::decode(ip4.payload, tcp, tcp_diag);
@@ -526,7 +538,19 @@ AnalysisReport AnalysisPipeline::run() {
                            << "\"flags\":null}";
                         network_layer_json = nl.str();
 
-                        if (ip6.upper_layer_protocol == 6) { // TCP over IPv6
+                        if (ip6.is_fragment && ip6.fragment_offset > 0) {
+                            report.protocol_counts["IPv6-Fragment"]++;
+                            std::ostringstream tl;
+                            tl << "{\"protocol\":\"Fragment\","
+                               << "\"source_port\":null,"
+                               << "\"destination_port\":null,"
+                               << "\"tcp_sequence_number\":null,"
+                               << "\"tcp_acknowledgment_number\":null,"
+                               << "\"tcp_flags\":null,"
+                               << "\"window_size\":null,"
+                               << "\"fragment_offset\":" << ip6.fragment_offset << "}";
+                            transport_layer_json = tl.str();
+                        } else if (ip6.upper_layer_protocol == 6) { // TCP over IPv6
                             decoders::DecodedTcp tcp;
                             std::string tcp_diag;
                             decoders::DecodeResult tcp_res = decoders::TcpDecoder::decode(ip6.payload, tcp, tcp_diag);

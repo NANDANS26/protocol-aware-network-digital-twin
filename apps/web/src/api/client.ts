@@ -603,6 +603,27 @@ export class NetworkTwinApiClient {
   async getBenchmarkSummary(): Promise<import('../types/benchmark').BenchmarkSummaryResponse> {
     return this.request<import('../types/benchmark').BenchmarkSummaryResponse>('/benchmarks/summary');
   }
+
+  // --- Phase 08 Adversarial Verification & Hardening ---
+
+  async getHardeningCases(): Promise<import('../types/hardening').AdversarialTestCase[]> {
+    return this.request<import('../types/hardening').AdversarialTestCase[]>('/twin/hardening/cases');
+  }
+
+  async runHardeningSuite(): Promise<import('../types/hardening').AdversarialRunSummary> {
+    return this.request<import('../types/hardening').AdversarialRunSummary>('/twin/hardening/run', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async getLatestHardeningRun(): Promise<import('../types/hardening').AdversarialRunSummary | null> {
+    return this.request<import('../types/hardening').AdversarialRunSummary | null>('/twin/hardening/latest');
+  }
+
+  async getHardeningRun(runId: string): Promise<import('../types/hardening').AdversarialRunSummary> {
+    return this.request<import('../types/hardening').AdversarialRunSummary>(`/twin/hardening/runs/${runId}`);
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();

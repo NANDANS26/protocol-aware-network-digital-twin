@@ -1,12 +1,12 @@
 # Implementation Status: Protocol Digital Twin & Security Verification Engine
 
-## Phase 07 Status Classification: Fully Operational
+## Phase 08 Status Classification: Fully Operational
 
 This document explicitly separates **Completed**, **Partial / Transitional**, **Planned**, and **Blocked** work across all platform subsystems.
 
 ---
 
-### 1. Completed Work (Phase 00 through Phase 07)
+### 1. Completed Work (Phase 00 through Phase 08)
 
 | Subsystem / Area | Component | Verification Evidence |
 | :--- | :--- | :--- |
@@ -50,7 +50,10 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 | **Resource & Throughput Profiling** | Empirical telemetry recording peak memory (tracemalloc heap tracking), memory growth, CPU duration, wall duration, and C++ zero-copy parsing throughput (packets/sec and Mbps). | Profile assertions verified in scale tests. |
 | **Benchmarking REST API** | 5 endpoints under `/api/v1/benchmarks`: `GET /fixtures`, `POST /run`, `GET /runs`, `GET /runs/{id}`, and `GET /summary`. | Verified in API integration tests. |
 | **React Benchmark Workbench** | Dedicated workbench tab (`BenchmarkWorkbench.tsx`) featuring fixture catalog, provenance badges, execution log, multi-stage deep dive (decoding, deterministic, predictive vs persistence, consensus supremacy, resource profiling), and truthfulness rules banner. | 6 passed Vitest unit tests in `BenchmarkWorkbench.test.tsx`. |
-| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 100%), pytest (156 tests), and vitest (32 tests). |
+| **Adversarial Hardening & Correctness Subsystem** | Dedicated adversarial testing harness (`apps/api/src/network_twin/hardening/`) with 10 hand-verifiable oracles covering LPM preference, metric tie-breaking, interface DOWN enforcement, self-referencing next-hop loop trapping, strict evidence determinism (no false PASS), true subnet and port ACL shadowing, C++ fragment reassembly resilience, and predictive split integrity. | 3 pytest unit & integration tests (`test_adversarial_hardening.py`), 100% oracles passed. Persistent JSON evidence in `data/hardening/`. |
+| **Adversarial Hardening REST API** | 4 endpoints under `/api/v1/twin/hardening`: `GET /cases`, `POST /run`, `GET /latest`, and `GET /runs/{run_id}`. | Verified in API integration tests. |
+| **React Adversarial Hardening Workbench** | Dedicated workbench tab (`AdversarialHardeningWorkbench.tsx`) in the Network Twin workstation featuring oracle catalog, category filters, hand-verifiable rationale explanations, live execution telemetry, expected-vs-observed outcome diffs, and audit trail ledger. | 4 passed Vitest unit tests in `AdversarialHardening.test.tsx`. |
+| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 100%), pytest (151 tests), and vitest (36 tests). |
 
 ---
 
@@ -61,10 +64,9 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 
 ---
 
-### 3. Planned Work (Phase 08 through Phase 10)
+### 3. Planned Work (Phase 09 through Phase 10)
 
-- **Phase 08**: Active network interface telemetry, continuous state synchronization, and streaming drift detection.
-- **Phase 09**: Distributed counterfactual simulation scale-out and multi-region cluster topologies.
+- **Phase 09**: Distributed counterfactual simulation scale-out, multi-region cluster topologies, and streaming drift detection.
 - **Phase 10**: Enterprise production hardening, RBAC, SSO, and multi-tenant security operations.
 
 ---

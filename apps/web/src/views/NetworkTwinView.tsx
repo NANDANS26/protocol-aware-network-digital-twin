@@ -31,6 +31,7 @@ import { ModelInspectorView } from './twin/ModelInspectorView';
 import { SecurityTestingWorkbench } from './twin/SecurityTestingWorkbench';
 import { PredictiveWorkbench } from './twin/PredictiveWorkbench';
 import { BenchmarkWorkbench } from './twin/BenchmarkWorkbench';
+import { AdversarialHardeningWorkbench } from './twin/AdversarialHardeningWorkbench';
 import {
   Server,
   Network,
@@ -66,6 +67,7 @@ export type TwinTab =
   | 'fuzzing'
   | 'predictive'
   | 'benchmarks'
+  | 'hardening'
   | 'evidence'
   | 'comparison'
   | 'imports';
@@ -683,6 +685,21 @@ export const NetworkTwinView: React.FC = () => {
           <span>Validation & Benchmarks</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
             Phase 07
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('hardening')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'hardening'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+          <span>Adversarial Hardening</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
+            Phase 08
           </span>
         </button>
 
@@ -1756,6 +1773,11 @@ export const NetworkTwinView: React.FC = () => {
       {/* TAB CONTENT: VALIDATION & BENCHMARKS */}
       {activeTab === 'benchmarks' && (
         <BenchmarkWorkbench />
+      )}
+
+      {/* TAB CONTENT: ADVERSARIAL VERIFICATION & HARDENING */}
+      {activeTab === 'hardening' && (
+        <AdversarialHardeningWorkbench />
       )}
 
       {/* Snapshot Creation Modal */}
