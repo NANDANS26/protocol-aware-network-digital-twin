@@ -7,6 +7,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from network_twin.benchmarking.models import (
+    BenchmarkRunRecord,
+    BenchmarkSummaryResponse,
+)
 from network_twin.config import AppSettings, settings
 from network_twin.models.intelligence import (
     Asset,
@@ -51,7 +55,7 @@ from network_twin.testing.sequence_models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class MetadataStore:
@@ -96,6 +100,8 @@ class MetadataStore:
                 self._migrate_to_v4(conn)
             if current_version < 5:
                 self._migrate_to_v5(conn)
+            if current_version < 6:
+                self._migrate_to_v6(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -556,6 +562,46 @@ class MetadataStore:
 
             INSERT INTO schema_migrations (version, applied_at, description)
             VALUES (5, datetime('now'), 'Phase 06: Predictive Network World Model, Datasets, Model Artifacts, and Predictions');
+            """
+        )
+        conn.commit()
+
+    def _migrate_to_v6(self, conn: sqlite3.Connection):
+        """Schema v6: Benchmarking and validation ledger."""
+        logger.info("Applying Metadata Store Schema Migration v6...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS benchmark_runs (
+                run_id TEXT PRIMARY KEY,
+                fixture_id TEXT NOT NULL,
+                fixture_name TEXT NOT NULL,
+                provenance TEXT NOT NULL,
+                category TEXT NOT NULL,
+                fixture_sha256 TEXT NOT NULL,
+                git_commit TEXT NOT NULL,
+                software_version TEXT NOT NULL,
+                executed_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                decoding_metrics_json TEXT NOT NULL,
+                deterministic_metrics_json TEXT NOT NULL,
+                predictive_metrics_json TEXT,
+                consensus_metrics_json TEXT,
+                operational_profile_json TEXT NOT NULL,
+                limitations_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS benchmark_metrics (
+                metric_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES benchmark_runs(run_id) ON DELETE CASCADE,
+                metric_name TEXT NOT NULL,
+                metric_value REAL NOT NULL,
+                sample_count INTEGER,
+                created_at TEXT NOT NULL
+            );
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (6, datetime('now'), 'Phase 07: Real-World Validation and Reproducible Benchmark Catalog');
             """
         )
         conn.commit()
@@ -2289,6 +2335,157 @@ class MetadataStore:
             for row in cur.fetchall():
                 records.append(PredictionResult.model_validate_json(row["result_json"]))
             return records
+
+    # --- Benchmarking & Real-World Validation (Phase 07) ---
+
+    def save_benchmark_run(self, run: BenchmarkRunRecord) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO benchmark_runs (
+                    run_id, fixture_id, fixture_name, provenance, category,
+                    fixture_sha256, git_commit, software_version, executed_at,
+                    status, decoding_metrics_json, deterministic_metrics_json,
+                    predictive_metrics_json, consensus_metrics_json,
+                    operational_profile_json, limitations_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    status = excluded.status,
+                    decoding_metrics_json = excluded.decoding_metrics_json,
+                    deterministic_metrics_json = excluded.deterministic_metrics_json,
+                    predictive_metrics_json = excluded.predictive_metrics_json,
+                    consensus_metrics_json = excluded.consensus_metrics_json,
+                    operational_profile_json = excluded.operational_profile_json,
+                    limitations_json = excluded.limitations_json;
+                """,
+                (
+                    run.run_id,
+                    run.fixture_id,
+                    run.fixture_name,
+                    str(run.provenance.value if hasattr(run.provenance, "value") else run.provenance),
+                    str(run.category.value if hasattr(run.category, "value") else run.category),
+                    run.fixture_sha256,
+                    run.git_commit,
+                    run.software_version,
+                    run.executed_at,
+                    run.status,
+                    run.decoding.model_dump_json(),
+                    run.deterministic.model_dump_json(),
+                    run.predictive.model_dump_json() if run.predictive else None,
+                    run.consensus.model_dump_json() if run.consensus else None,
+                    run.operational.model_dump_json(),
+                    json.dumps(run.limitations),
+                ),
+            )
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO benchmark_metrics (metric_id, run_id, metric_name, metric_value, sample_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    f"{run.run_id}-throughput",
+                    run.run_id,
+                    "throughput_pkts_sec",
+                    float(run.decoding.throughput_pkts_per_sec),
+                    run.decoding.packets_decoded,
+                    run.executed_at,
+                ),
+            )
+            conn.commit()
+
+    def get_benchmark_run(self, run_id: str) -> BenchmarkRunRecord | None:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM benchmark_runs WHERE run_id = ?;", (run_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return self._row_to_benchmark_run(row)
+
+    def list_benchmark_runs(self, limit: int = 50) -> list[BenchmarkRunRecord]:
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM benchmark_runs ORDER BY executed_at DESC LIMIT ?;", (limit,))
+            return [self._row_to_benchmark_run(row) for row in cur.fetchall()]
+
+    def _row_to_benchmark_run(self, row: sqlite3.Row) -> BenchmarkRunRecord:
+        from network_twin.benchmarking.models import (
+            BenchmarkCategory,
+            BenchmarkProvenance,
+            ConsensusStageMetrics,
+            DecodingStageMetrics,
+            DeterministicStageMetrics,
+            OperationalProfile,
+            PredictiveStageMetrics,
+        )
+
+        decoding = DecodingStageMetrics.model_validate_json(row["decoding_metrics_json"])
+        deterministic = DeterministicStageMetrics.model_validate_json(row["deterministic_metrics_json"])
+        predictive = (
+            PredictiveStageMetrics.model_validate_json(row["predictive_metrics_json"])
+            if row["predictive_metrics_json"]
+            else None
+        )
+        consensus = (
+            ConsensusStageMetrics.model_validate_json(row["consensus_metrics_json"])
+            if row["consensus_metrics_json"]
+            else None
+        )
+        operational = OperationalProfile.model_validate_json(row["operational_profile_json"])
+        limitations = json.loads(row["limitations_json"]) if row["limitations_json"] else []
+
+        return BenchmarkRunRecord(
+            run_id=row["run_id"],
+            fixture_id=row["fixture_id"],
+            fixture_name=row["fixture_name"],
+            provenance=BenchmarkProvenance(row["provenance"]),
+            category=BenchmarkCategory(row["category"]),
+            fixture_sha256=row["fixture_sha256"],
+            git_commit=row["git_commit"],
+            software_version=row["software_version"],
+            executed_at=row["executed_at"],
+            status=row["status"],
+            decoding=decoding,
+            deterministic=deterministic,
+            predictive=predictive,
+            consensus=consensus,
+            operational=operational,
+            limitations=limitations,
+        )
+
+    def get_benchmark_summary(self) -> BenchmarkSummaryResponse:
+        runs = self.list_benchmark_runs(limit=100)
+        total_runs = len(runs)
+        if total_runs == 0:
+            return BenchmarkSummaryResponse(
+                total_runs=0,
+                verified_fixtures_count=0,
+                average_throughput_pkts_sec=0.0,
+                deterministic_accuracy_pct=100.0,
+                models_beating_baseline_pct=0.0,
+                runs=[],
+            )
+
+        unique_fixtures = {r.fixture_id for r in runs}
+        avg_throughput = sum(r.decoding.throughput_pkts_per_sec for r in runs) / total_runs
+        deterministic_correct = sum(
+            1 for r in runs if r.deterministic.forwarding_matches_expected and r.deterministic.invariant_matches_expected
+        )
+        accuracy_pct = (deterministic_correct / total_runs) * 100.0
+
+        runs_with_predictive = [r for r in runs if r.predictive and r.predictive.comparison_status != "INSUFFICIENT_DATA"]
+        if runs_with_predictive:
+            beating = sum(1 for r in runs_with_predictive if r.predictive.comparison_status == "BEATS_BASELINE")
+            beating_pct = (beating / len(runs_with_predictive)) * 100.0
+        else:
+            beating_pct = 0.0
+
+        return BenchmarkSummaryResponse(
+            total_runs=total_runs,
+            verified_fixtures_count=len(unique_fixtures),
+            average_throughput_pkts_sec=round(avg_throughput, 2),
+            deterministic_accuracy_pct=round(accuracy_pct, 2),
+            models_beating_baseline_pct=round(beating_pct, 2),
+            runs=runs,
+        )
 
 
 metadata_store = MetadataStore()

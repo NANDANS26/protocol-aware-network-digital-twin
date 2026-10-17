@@ -577,6 +577,32 @@ export class NetworkTwinApiClient {
   async getPredictiveLimitations(): Promise<import('../types/predictive').PredictiveLimitationsResponse> {
     return this.request<import('../types/predictive').PredictiveLimitationsResponse>('/predictive/limitations');
   }
+
+  // --- Phase 07 Benchmarking & Auditing ---
+
+  async listBenchmarkFixtures(): Promise<import('../types/benchmark').BenchmarkFixtureMeta[]> {
+    return this.request<import('../types/benchmark').BenchmarkFixtureMeta[]>('/benchmarks/fixtures');
+  }
+
+  async runBenchmark(req: { fixture_id?: string; category?: string; provenance?: string; random_seed?: number }): Promise<import('../types/benchmark').BenchmarkRunRecord[]> {
+    return this.request<import('../types/benchmark').BenchmarkRunRecord[]>('/benchmarks/run', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async listBenchmarkRuns(limit?: number): Promise<import('../types/benchmark').BenchmarkRunRecord[]> {
+    const qs = limit ? `?limit=${limit}` : '';
+    return this.request<import('../types/benchmark').BenchmarkRunRecord[]>(`/benchmarks/runs${qs}`);
+  }
+
+  async getBenchmarkRun(runId: string): Promise<import('../types/benchmark').BenchmarkRunRecord> {
+    return this.request<import('../types/benchmark').BenchmarkRunRecord>(`/benchmarks/runs/${runId}`);
+  }
+
+  async getBenchmarkSummary(): Promise<import('../types/benchmark').BenchmarkSummaryResponse> {
+    return this.request<import('../types/benchmark').BenchmarkSummaryResponse>('/benchmarks/summary');
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();

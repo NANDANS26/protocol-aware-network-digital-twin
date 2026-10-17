@@ -1,12 +1,12 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 06 Predictive World Model](https://img.shields.io/badge/Phase%2006-Predictive%20World%20Model%20Verified-brightgreen)](#)
+[![Phase 07 Reproducible Validation & Benchmarking](https://img.shields.io/badge/Phase%2007-Validation%20%26%20Benchmarking%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, and predictive network world modeling.
+An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, and reproducible end-to-end benchmarking.
 
 ---
 
@@ -23,23 +23,24 @@ The platform provides a unified system combining low-latency systems software wi
 7. **Isolated Protocol Fuzzing & Differential Testing**: Deep parser verification, metamorphic testing, and automated delta minimization.
 8. **Stateful Protocol Sequence Testing**: Multi-packet state-machine fuzzing, TCP transition checking, and differential testing.
 9. **Predictive Network World Model**: Time-windowed feature extraction, baseline comparison, 90% conformal uncertainty intervals, Out-of-Distribution (OOD) distance gating, and deterministic ground-truth supremacy consensus.
-10. **Professional React Engineering Workstation**: High-density dark engineering visual shell, predictive workbench, and telemetry cockpit.
+10. **Reproducible Validation & Benchmarking**: End-to-end pipeline audit, ground-truth supremacy verification, versioned dataset fixtures, and empirical resource profiling.
+11. **Professional React Engineering Workstation**: High-density dark engineering visual shell, benchmark workbench, predictive workbench, and telemetry cockpit.
 
 ---
 
-## 2. Current Implementation Status (Phase 06 Operational)
+## 2. Current Implementation Status (Phase 07 Operational)
 
-Phase 06 introduces a learned predictive network world model operating alongside deterministic verification:
+Phase 07 establishes comprehensive end-to-end verification, ground-truth supremacy, and reproducible benchmarking across the entire twin pipeline:
 
-- **Versioned Feature Extraction Pipeline**: Zero-leakage time-windowed numeric feature extraction from flows, packets, and topology snapshots without raw payload retention.
-- **Baseline Comparison & Calibrated Models**: Persistence and Moving Average baseline models evaluated against Ridge, Logistic Regression, and Random Forest models on future prediction targets.
-- **Empirical 90% Conformal Uncertainty Intervals**: Conformal calibration yielding bounded intervals `[lower, upper]` with empirical coverage guarantees.
-- **Out-of-Distribution (OOD) Distance Gating**: Mahalanobis distance gating classifying predictions as High Reliability, Moderate Uncertainty, or Out-of-Distribution.
-- **Scenario Consensus Harmonizer**: Consensus engine joining statistical behavior forecasts with deterministic simulation traces under strict ground-truth supremacy (a learned model never overrides a formal security invariant).
-- **Relational Persistence**: SQLite catalog with Schema Migration v5 storing datasets, model artifacts, and prediction records.
-- **Predictive World Model REST API**: 10 endpoints under `/api/v1/predictive` for dataset creation, model training, evaluation vs baselines, inference, and scenario evaluation.
-- **React Predictive Workbench**: Dedicated workbench tab (`PredictiveWorkbench.tsx`) inside the Network Twin workstation for dataset inspection, model comparison, live calibrated inference, scenario consensus, and methodological rules.
-- **Full Automated Quality Gates**: 149 pytest tests, 26 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
+- **End-to-End Twin Data Path Audit**: Comprehensive ground-truth audit report (`docs/audits/phase07_twin_audit.md`) tracing PCAP bytes through decoding, canonical events, Parquet store, topology reconstruction, deterministic simulation, ML feature extraction, conformal predictions, consensus harmonizer, and React UI.
+- **Deterministic Benchmark Runner**: Multi-stage benchmark suite evaluating versioned dataset fixtures (`handshake-core`, `public-sample-pcap`, `dns-service-resolution`, `security-ssh-violation`, `empty-malformed-edge`, `scale-profiling-workload`) with explicit provenance tagging (`REAL_CAPTURE`, `PUBLIC_CAPTURE`, `SYNTHETIC_FIXTURE`).
+- **Ground-Truth Supremacy Verification**: Mathematical guarantee and proof that deterministic packet forwarding and security invariants supersede statistical predictions. Zero false positives on legitimate handshakes; zero false negatives on adversarial ACL drops.
+- **Baseline Comparison & Conformal Calibration**: Machine learning forecasts evaluated against persistence baselines with sample counts ($N$), 90% conformal coverage, and Mahalanobis Out-of-Distribution (OOD) distance gating.
+- **Empirical Resource & Throughput Profiling**: Real heap memory tracking (`tracemalloc`), CPU process time, wall latency, and C++ offline parser throughput (packets/sec and Mbps).
+- **Relational Persistence**: SQLite catalog with Schema Migration v6 storing `benchmark_runs` and `benchmark_metrics`.
+- **Benchmarking REST API**: 5 endpoints under `/api/v1/benchmarks` (`GET /fixtures`, `POST /run`, `GET /runs`, `GET /runs/{id}`, and `GET /summary`).
+- **React Benchmark Workbench**: Dedicated workbench tab (`BenchmarkWorkbench.tsx`) inside the Network Twin workstation for fixture inspection, execution log, multi-stage deep dives, and truthfulness standards.
+- **Full Automated Quality Gates**: 156 pytest tests, 32 vitest tests, 100% C++ engine tests, strict TypeScript (`tsc --noEmit`), and Ruff linting passing cleanly.
 
 See [docs/status/implementation-status.md](docs/status/implementation-status.md) for full status breakdown.
 

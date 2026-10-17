@@ -30,6 +30,7 @@ import { CounterfactualScenarioView } from './twin/CounterfactualScenarioView';
 import { ModelInspectorView } from './twin/ModelInspectorView';
 import { SecurityTestingWorkbench } from './twin/SecurityTestingWorkbench';
 import { PredictiveWorkbench } from './twin/PredictiveWorkbench';
+import { BenchmarkWorkbench } from './twin/BenchmarkWorkbench';
 import {
   Server,
   Network,
@@ -42,6 +43,7 @@ import {
   Plus,
   GitCompare,
   CheckCircle,
+  CheckCircle2,
   AlertTriangle,
   ArrowRight,
   Database,
@@ -63,6 +65,7 @@ export type TwinTab =
   | 'models'
   | 'fuzzing'
   | 'predictive'
+  | 'benchmarks'
   | 'evidence'
   | 'comparison'
   | 'imports';
@@ -451,7 +454,7 @@ export const NetworkTwinView: React.FC = () => {
                 </span>
               </h1>
               <p className="text-xs text-gray-400 mt-0.5">
-                Executable network digital twin, deterministic reachability, security verification & protocol fuzzing
+                Executable network digital twin, deterministic security verification, predictive models & reproducible benchmarks
               </p>
             </div>
           </div>
@@ -665,6 +668,21 @@ export const NetworkTwinView: React.FC = () => {
           <span>Predictive World Model</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-950 text-blue-300 border border-blue-800">
             Phase 06
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('benchmarks')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'benchmarks'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Validation & Benchmarks</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+            Phase 07
           </span>
         </button>
 
@@ -1733,6 +1751,11 @@ export const NetworkTwinView: React.FC = () => {
       {/* TAB CONTENT: PREDICTIVE WORLD MODEL & BEHAVIOR FORECASTING */}
       {activeTab === 'predictive' && (
         <PredictiveWorkbench />
+      )}
+
+      {/* TAB CONTENT: VALIDATION & BENCHMARKS */}
+      {activeTab === 'benchmarks' && (
+        <BenchmarkWorkbench />
       )}
 
       {/* Snapshot Creation Modal */}

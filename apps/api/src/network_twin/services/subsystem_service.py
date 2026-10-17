@@ -80,6 +80,12 @@ class SubsystemService:
                 details="Predictive network behavior forecasting, conformal uncertainty assessment, and scenario evaluation active in Phase 06.",
                 last_checked=now,
             ),
+            "validation_benchmarks": SubsystemReport(
+                status=SubsystemState.OK,
+                operational_state=OperationalState.OPERATIONAL,
+                details="Deterministic benchmark runner, fixture provenance tracking, and end-to-end audit active in Phase 07.",
+                last_checked=now,
+            ),
         }
 
         # Check Database dependency if configured
