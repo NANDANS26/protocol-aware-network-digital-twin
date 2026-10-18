@@ -662,6 +662,49 @@ export class NetworkTwinApiClient {
       method: 'POST',
     });
   }
+
+  // --- Phase 10: Evidence-Backed Incident Investigation & Root-Cause Analysis ---
+
+  async listInvestigations(): Promise<import('../types/investigations').InvestigationCase[]> {
+    return this.request<import('../types/investigations').InvestigationCase[]>('/twin/investigations');
+  }
+
+  async createInvestigation(req: import('../types/investigations').CreateInvestigationRequest): Promise<import('../types/investigations').InvestigationCase> {
+    return this.request<import('../types/investigations').InvestigationCase>('/twin/investigations', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async getInvestigation(investigationId: string): Promise<import('../types/investigations').InvestigationCase> {
+    return this.request<import('../types/investigations').InvestigationCase>(`/twin/investigations/${investigationId}`);
+  }
+
+  async executeInvestigation(investigationId: string): Promise<import('../types/investigations').InvestigationCase> {
+    return this.request<import('../types/investigations').InvestigationCase>(`/twin/investigations/${investigationId}/execute`, {
+      method: 'POST',
+    });
+  }
+
+  async runInvestigationCounterfactual(
+    investigationId: string,
+    req: import('../types/investigations').RunCounterfactualRequest
+  ): Promise<import('../types/investigations').InvestigationCase> {
+    return this.request<import('../types/investigations').InvestigationCase>(`/twin/investigations/${investigationId}/counterfactual`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async exportInvestigation(investigationId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(`/twin/investigations/${investigationId}/export`);
+  }
+
+  async deleteInvestigation(investigationId: string): Promise<{ status: string; investigation_id: string }> {
+    return this.request<{ status: string; investigation_id: string }>(`/twin/investigations/${investigationId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();

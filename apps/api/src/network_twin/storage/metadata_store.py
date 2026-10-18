@@ -12,6 +12,7 @@ from network_twin.benchmarking.models import (
     BenchmarkSummaryResponse,
 )
 from network_twin.config import AppSettings, settings
+from network_twin.investigations.models import InvestigationCase
 from network_twin.models.intelligence import (
     Asset,
     CommunicationRelationship,
@@ -55,7 +56,7 @@ from network_twin.testing.sequence_models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 class MetadataStore:
@@ -102,6 +103,8 @@ class MetadataStore:
                 self._migrate_to_v5(conn)
             if current_version < 6:
                 self._migrate_to_v6(conn)
+            if current_version < 7:
+                self._migrate_to_v7(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -606,6 +609,36 @@ class MetadataStore:
         )
         conn.commit()
 
+    def _migrate_to_v7(self, conn: sqlite3.Connection):
+        """Schema v7: Incident Investigations, Evidence Graphs, and Ranked Explanations."""
+        logger.info("Applying Metadata Store Schema Migration v7...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS investigation_cases (
+                investigation_id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                investigation_type TEXT NOT NULL,
+                scope_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                sufficiency TEXT NOT NULL,
+                created_at_iso TEXT NOT NULL,
+                updated_at_iso TEXT NOT NULL,
+                evidence_graph_json TEXT NOT NULL,
+                candidate_explanations_json TEXT NOT NULL,
+                primary_root_cause_id TEXT,
+                counterfactual_comparisons_json TEXT NOT NULL,
+                unresolved_questions_json TEXT NOT NULL,
+                explicit_limitations_json TEXT NOT NULL,
+                reproduction_steps_json TEXT NOT NULL
+            );
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (7, datetime('now'), 'Phase 10: Evidence-Backed Network Incident Investigation and Root-Cause Analysis');
+            """
+        )
+        conn.commit()
+
     # --- Captures & Jobs ---
 
     def register_capture(
@@ -882,6 +915,14 @@ class MetadataStore:
         with self._get_connection() as conn:
             cur = conn.execute(query, params)
             return [self._row_to_asset(r) for r in cur.fetchall()]
+
+    def find_asset_by_ip(self, ip: str) -> Asset | None:
+        """Finds an asset whose primary_ip or ip_addresses matches the given IP."""
+        assets = self.list_assets(ip_query=ip, limit=10)
+        for asset in assets:
+            if asset.primary_ip == ip or ip in asset.ip_addresses:
+                return asset
+        return None
 
     def _row_to_asset(self, row: sqlite3.Row) -> Asset:
         return Asset(
@@ -1316,6 +1357,32 @@ class MetadataStore:
 
     def save_network_model(self, model: NetworkModel) -> None:
         with self._get_connection() as conn:
+            if model.source_snapshot_id:
+                cur = conn.execute("SELECT 1 FROM topology_snapshots WHERE snapshot_id = ?;", (model.source_snapshot_id,))
+                if not cur.fetchone():
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO topology_snapshots (
+                            snapshot_id, name, created_at, source_captures_json, source_configs_json,
+                            identity_policy_version, graph_algorithm_version, node_count, edge_count,
+                            unresolved_conflicts_json, schema_version, metadata_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        """,
+                        (
+                            model.source_snapshot_id,
+                            f"Snapshot for {model.name}",
+                            model.created_at_iso,
+                            "[]",
+                            "[]",
+                            "1.0",
+                            "1.0",
+                            len(model.nodes),
+                            0,
+                            "[]",
+                            "1.0",
+                            "{}",
+                        ),
+                    )
             conn.execute(
                 """
                 INSERT INTO network_models (
@@ -2486,6 +2553,119 @@ class MetadataStore:
             models_beating_baseline_pct=round(beating_pct, 2),
             runs=runs,
         )
+
+    # --- Phase 10: Incident Investigations ---
+
+    def save_investigation(self, case: InvestigationCase):
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO investigation_cases (
+                    investigation_id, title, investigation_type, scope_json,
+                    status, sufficiency, created_at_iso, updated_at_iso,
+                    evidence_graph_json, candidate_explanations_json,
+                    primary_root_cause_id, counterfactual_comparisons_json,
+                    unresolved_questions_json, explicit_limitations_json,
+                    reproduction_steps_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(investigation_id) DO UPDATE SET
+                    title=excluded.title,
+                    investigation_type=excluded.investigation_type,
+                    scope_json=excluded.scope_json,
+                    status=excluded.status,
+                    sufficiency=excluded.sufficiency,
+                    updated_at_iso=excluded.updated_at_iso,
+                    evidence_graph_json=excluded.evidence_graph_json,
+                    candidate_explanations_json=excluded.candidate_explanations_json,
+                    primary_root_cause_id=excluded.primary_root_cause_id,
+                    counterfactual_comparisons_json=excluded.counterfactual_comparisons_json,
+                    unresolved_questions_json=excluded.unresolved_questions_json,
+                    explicit_limitations_json=excluded.explicit_limitations_json,
+                    reproduction_steps_json=excluded.reproduction_steps_json;
+                """,
+                (
+                    case.investigation_id,
+                    case.title,
+                    case.investigation_type.value,
+                    json.dumps(case.scope.model_dump()),
+                    case.status,
+                    case.sufficiency.value,
+                    case.created_at_iso,
+                    case.updated_at_iso,
+                    json.dumps(case.evidence_graph.model_dump()),
+                    json.dumps([c.model_dump() for c in case.candidate_explanations]),
+                    case.primary_root_cause_id,
+                    json.dumps([c.model_dump() for c in case.counterfactual_comparisons]),
+                    json.dumps(case.unresolved_questions),
+                    json.dumps(case.explicit_limitations),
+                    json.dumps(case.reproduction_steps),
+                ),
+            )
+            conn.commit()
+
+    def get_investigation(self, investigation_id: str) -> InvestigationCase | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT * FROM investigation_cases WHERE investigation_id = ?;",
+                (investigation_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return InvestigationCase(
+                investigation_id=row["investigation_id"],
+                title=row["title"],
+                investigation_type=row["investigation_type"],
+                scope=json.loads(row["scope_json"]),
+                status=row["status"],
+                sufficiency=row["sufficiency"],
+                created_at_iso=row["created_at_iso"],
+                updated_at_iso=row["updated_at_iso"],
+                evidence_graph=json.loads(row["evidence_graph_json"]),
+                candidate_explanations=json.loads(row["candidate_explanations_json"]),
+                primary_root_cause_id=row["primary_root_cause_id"],
+                counterfactual_comparisons=json.loads(row["counterfactual_comparisons_json"]),
+                unresolved_questions=json.loads(row["unresolved_questions_json"]),
+                explicit_limitations=json.loads(row["explicit_limitations_json"]),
+                reproduction_steps=json.loads(row["reproduction_steps_json"]),
+            )
+
+    def list_investigations(self) -> list[InvestigationCase]:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT * FROM investigation_cases ORDER BY created_at_iso DESC;"
+            )
+            rows = cur.fetchall()
+            return [
+                InvestigationCase(
+                    investigation_id=row["investigation_id"],
+                    title=row["title"],
+                    investigation_type=row["investigation_type"],
+                    scope=json.loads(row["scope_json"]),
+                    status=row["status"],
+                    sufficiency=row["sufficiency"],
+                    created_at_iso=row["created_at_iso"],
+                    updated_at_iso=row["updated_at_iso"],
+                    evidence_graph=json.loads(row["evidence_graph_json"]),
+                    candidate_explanations=json.loads(row["candidate_explanations_json"]),
+                    primary_root_cause_id=row["primary_root_cause_id"],
+                    counterfactual_comparisons=json.loads(row["counterfactual_comparisons_json"]),
+                    unresolved_questions=json.loads(row["unresolved_questions_json"]),
+                    explicit_limitations=json.loads(row["explicit_limitations_json"]),
+                    reproduction_steps=json.loads(row["reproduction_steps_json"]),
+                )
+                for row in rows
+            ]
+
+    def delete_investigation(self, investigation_id: str) -> bool:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM investigation_cases WHERE investigation_id = ?;",
+                (investigation_id,),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
 
 metadata_store = MetadataStore()

@@ -60,7 +60,12 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 | **Native Process Resource Isolation** | Isolated telemetry measuring peak native process memory (`GetProcessMemoryInfo` via Win32 ctypes on Windows) independently from Python heap allocations (`tracemalloc`). | Verified in differential engine telemetry. |
 | **Capture Validation REST API** | 6 endpoints under `/api/v1/twin/captures`: `GET /`, `GET /summary`, `GET /{id}`, `POST /{id}/validate`, `POST /differential`, and `POST /{id}/e2e`. | Verified in `test_captures_api_endpoints`. |
 | **React Real-Capture & Differential Workbench** | Dedicated workbench tab (`RealCaptureWorkbench.tsx`) featuring capture manifest catalog, provenance & limitations viewer, ground-truth expected outcomes matrix, reference decoder comparison, isolated process telemetry, metamorphic invariant testing cockpit, and end-to-end data path audit. | 4 passed Vitest unit tests in `RealCaptureWorkbench.test.tsx`. |
-| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 100%), pytest (159 tests), and vitest (40 tests). |
+| **Evidence-Backed Incident Investigation Subsystem** | Deterministic incident root-cause analysis engine (`apps/api/src/network_twin/investigations/`) implementing strongly typed cases, epistemological classes (OBSERVED, INFERRED, SIMULATED, PREDICTED), and strict anti-fabrication controls. | Verified in `test_investigations.py` (7 tests). |
+| **5 Deterministic Investigation Workflows** | Automated workflows covering Connectivity Failure (LPM, DOWN interface, ACL drop), Unexpected Policy Decision (firewall permit/deny with rule shadowing detection), DNS/Service-Resolution (NXDOMAIN, timeout, unmodeled), Unexpected Traffic Relationship (disclaiming ungrounded physical link assertions), and Change-Related Behavior (snapshot diff correlation). | Fully verified across all 5 incident workflows. |
+| **Isolated Counterfactual Remediation Engine** | Deep-clones digital twin models in isolation, applies hypothetical remedial mutations (`SET_INTERFACE_STATE`, `ADD_FIREWALL_RULE`, `ADD_ROUTE`), re-evaluates forward simulation, and verifies `REMEDIAL_ACTION_CONFIRMED` outcomes side-by-side. | Tested in `test_investigate_counterfactual_remediation`. |
+| **Incident Investigation REST API** | 7 endpoints under `/api/v1/twin/investigations`: `POST /`, `GET /`, `GET /{id}`, `POST /{id}/execute`, `POST /{id}/counterfactual`, `GET /{id}/export`, and `DELETE /{id}`. | Tested in `test_investigation_rest_api_endpoints`. |
+| **React Incident Investigation Workbench** | Dedicated interactive workbench tab (`InvestigationWorkbench.tsx`) featuring case creation modal, epistemological badges, ranked root cause cards, evidence timeline/graph visualizer, side-by-side counterfactual comparisons, bounded limitations, and reproducible evidence instructions. | 4 passed Vitest unit tests in `InvestigationWorkbench.test.tsx`. |
+| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 26/26 tests, 183 assertions), pytest (166 tests), and vitest (44 tests). |
 
 ---
 
@@ -71,12 +76,13 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 
 ---
 
-### 3. Planned Work (Phase 10)
+### 3. Planned Work (Phase 11)
 
-- **Phase 10**: Enterprise production hardening, RBAC, SSO, multi-tenant security operations, distributed simulation clustering, and streaming network drift alerts.
+- **Phase 11**: Autonomous Multi-Twin Federation, Cross-Domain Attestation, Formal SMT Solver Symbolic Reachability, and Dynamic Chaos Injection.
 
 ---
 
 ### 4. Blocked Work / Known Limitations
 
 - **Live Capture on Windows Host without Npcap**: Live network interface capture requires administrative privileges and an installed Npcap/WinPcap driver. In the current development environment without Npcap, live capture is gracefully disabled, while file-based PCAP and synthetic packet sources are 100% functional.
+

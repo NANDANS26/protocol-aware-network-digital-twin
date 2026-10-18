@@ -1,12 +1,12 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 09 Real-Capture Validation & Differential Testing](https://img.shields.io/badge/Phase%2009-Real--Capture%20Validated-brightgreen)](#)
+[![Phase 10 Evidence-Backed Network Investigations](https://img.shields.io/badge/Phase%2010-Incident%20Investigations%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, reproducible end-to-end benchmarking, adversarial verification hardening, and real-capture differential testing.
+An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, reproducible end-to-end benchmarking, adversarial verification hardening, real-capture differential testing, and evidence-backed incident investigation.
 
 ---
 
@@ -26,24 +26,29 @@ The platform provides a unified system combining low-latency systems software wi
 10. **Reproducible Validation & Benchmarking**: End-to-end pipeline audit, ground-truth supremacy verification, versioned dataset fixtures, and empirical resource profiling.
 11. **Adversarial Verification & Trustworthy Hardening**: Independent hand-verifiable oracles, snapshot immutability, elimination of false PASS on unresolved evidence, true subnet and port ACL shadowing detection, and parser resilience.
 12. **Real-Capture Validation & Mathematical Differential Oracle**: Versioned capture corpus with verifiable provenance, independent pure Python reference decoder, metamorphic invariant testing (PCAP vs PCAPNG format equivalence, timestamp shifting, noise injection), and isolated native process memory telemetry.
-13. **Professional React Engineering Workstation**: High-density dark engineering visual shell, real-capture workbench, adversarial hardening workbench, benchmark workbench, predictive workbench, and telemetry cockpit.
+13. **Evidence-Backed Incident Investigation & Root-Cause Analysis**: Strongly typed incident cases, epistemological evidence grounding (OBSERVED, INFERRED, SIMULATED, PREDICTED), zero-fabrication guardrails, 5 specialized workflows (Connectivity, Policy, DNS, Relationship, Changes), and isolated counterfactual remediation validation.
+14. **Professional React Engineering Workstation**: High-density dark engineering visual shell, incident investigation workbench, real-capture workbench, adversarial hardening workbench, benchmark workbench, predictive workbench, and telemetry cockpit.
 
 ---
 
-## 2. Current Implementation Status (Phase 09 Operational)
+## 2. Current Implementation Status (Phase 10 Operational)
 
-Phase 09 establishes empirical correctness across the entire digital twin pipeline using real packet traces and independent mathematical oracles:
+Phase 10 delivers an evidence-grounded, explainable incident investigation subsystem built on top of the verified digital twin:
 
-- **Versioned Capture Corpus**: 9 reproducible fixtures under `data/captures/` with cataloged provenance (`PUBLIC_CAPTURE`, `SYNTHETIC_FIXTURE`), licensing (GPL-2.0, CC0, Apache-2.0), SHA-256 fingerprints, and independently established ground-truth outcomes.
-- **Pure Python Mathematical Reference Decoder**: Built from first principles in pure Python (`apps/api/src/network_twin/captures/reference_decoder.py`) without relying on the C++ systems engine, validating Ethernet, 802.1Q VLAN, IPv4, IPv6, ARP, ICMP, TCP, UDP, DNS, HTTP, and TLS SNI.
-- **Metamorphic Invariant Testing**: Evaluated bit-exact PCAP vs PCAPNG format equivalence (`MR-FORMAT`), temporal translation invariance (`MR-TIMESHIFT`), and strict flow isolation (`MR-NOISE`).
-- **Unmocked End-to-End Pipeline Audit**: Verified complete uninterrupted data path from PCAP bytes -> C++ `protocol_engine.exe` -> DuckDB/Parquet -> SQLite Metadata Store -> GraphBuilder Topology -> Security Invariants -> Predictive Feature Extraction.
-- **Process Resource Isolation**: Separated native C++ process memory (`PeakWorkingSetSize` via Win32 ctypes) from Python interpreter heap allocations (`tracemalloc`).
-- **Capture Validation REST API**: 6 endpoints under `/api/v1/twin/captures` (`GET /`, `GET /summary`, `GET /{id}`, `POST /{id}/validate`, `POST /differential`, and `POST /{id}/e2e`).
-- **React Real-Capture & Differential Workbench**: Dedicated workbench tab (`RealCaptureWorkbench.tsx`) featuring capture manifest catalog, provenance & limitations viewer, expected outcomes matrix, reference decoder comparison, isolated process telemetry, metamorphic invariant testing cockpit, and end-to-end data path audit.
-- **Comprehensive Quality Gates**: 159 passed pytest tests (0 failures), 40 passed Vitest tests (0 failures), 100% C++ engine tests (26 doctest cases / 183 assertions), strict TypeScript (`tsc --noEmit`), and Ruff linting (0 errors).
+- **Epistemological Classification**: Rigorous separation between `OBSERVED` packet facts, `INFERRED` endpoint states, `SIMULATED` forwarding decisions, and `PREDICTED` statistical forecasts.
+- **Strict Anti-Fabrication**: Unknown or unmodeled endpoints and packets produce explicit `INDETERMINATE` and `INSUFFICIENT_EVIDENCE` states; never fabricated confirmed causes.
+- **5 Deterministic Investigation Workflows**:
+  - *Connectivity Failure*: LPM routing, down interface detection, next-hop resolution, ACL drop tracing.
+  - *Unexpected Policy Decision*: Firewall rule evaluation, default policy drops, rule shadowing detection.
+  - *DNS & Service Resolution*: Non-zero RCODEs (NXDOMAIN/SERVFAIL), unresponded queries, zero-traffic detection.
+  - *Unexpected Traffic Relationships*: Correlates observed flows vs reconstructed topology without rogue link fabrication.
+  - *Change-Related Behavior*: Snapshot mutation diffing isolating structural and route alterations.
+- **Isolated Counterfactual Remediation**: Deep-clones twin models in isolation, applies hypothetical mutations (`SET_INTERFACE_STATE`, `ADD_FIREWALL_RULE`, `ADD_ROUTE`), and verifies `REMEDIAL_ACTION_CONFIRMED` outcomes side-by-side.
+- **Persistence & API Contracts**: SQLite Schema Version 7 migration (`investigation_cases`), 7 REST endpoints under `/api/v1/twin/investigations`.
+- **React Incident Investigation Workbench**: Dedicated interactive workbench (`InvestigationWorkbench.tsx`) with workflow selector, epistemological badges, ranked root cause cards, evidence timeline/graph visualizer, side-by-side counterfactual comparisons, bounded limitations, and reproducible evidence instructions.
+- **Comprehensive Quality Gates**: 166 passed pytest tests (0 failures), 44 passed Vitest tests (0 failures), 100% C++ engine tests (26 doctest cases / 183 assertions), strict TypeScript (`tsc --noEmit`), and Ruff linting (0 errors).
 
-See [docs/status/implementation-status.md](docs/status/implementation-status.md), [docs/audits/phase08_hardening_audit.md](docs/audits/phase08_hardening_audit.md), and [docs/audits/phase09_capture_audit.md](docs/audits/phase09_capture_audit.md) for full audit reports.
+See [docs/status/implementation-status.md](docs/status/implementation-status.md), [docs/audits/phase09_capture_audit.md](docs/audits/phase09_capture_audit.md), and [docs/audits/phase10_investigation_audit.md](docs/audits/phase10_investigation_audit.md) for full audit reports.
 
 ---
 

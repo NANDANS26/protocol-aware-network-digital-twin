@@ -33,6 +33,7 @@ import { PredictiveWorkbench } from './twin/PredictiveWorkbench';
 import { BenchmarkWorkbench } from './twin/BenchmarkWorkbench';
 import { AdversarialHardeningWorkbench } from './twin/AdversarialHardeningWorkbench';
 import { RealCaptureWorkbench } from './twin/RealCaptureWorkbench';
+import { InvestigationWorkbench } from './twin/InvestigationWorkbench';
 import {
   Server,
   Network,
@@ -71,6 +72,7 @@ export type TwinTab =
   | 'benchmarks'
   | 'hardening'
   | 'captures'
+  | 'investigations'
   | 'evidence'
   | 'comparison'
   | 'imports';
@@ -718,6 +720,21 @@ export const NetworkTwinView: React.FC = () => {
           <span>Real Captures & Differential</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
             Phase 09
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('investigations')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'investigations'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <Search className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Incident Investigations</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800">
+            Phase 10
           </span>
         </button>
 
@@ -1801,6 +1818,11 @@ export const NetworkTwinView: React.FC = () => {
       {/* TAB CONTENT: REAL CAPTURE VALIDATION & DIFFERENTIAL TESTING */}
       {activeTab === 'captures' && (
         <RealCaptureWorkbench />
+      )}
+
+      {/* TAB CONTENT: INCIDENT INVESTIGATIONS */}
+      {activeTab === 'investigations' && (
+        <InvestigationWorkbench />
       )}
 
       {/* Snapshot Creation Modal */}
