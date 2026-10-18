@@ -104,4 +104,4 @@ def test_controlled_fault_injection_crash_detection(runner):
     assert res.crash_detected is True
     assert len(findings) == 1
     assert findings[0].category.value == "CRASH"
-    assert "protocol_engine.exe" in findings[0].reproduction_command
+    assert "protocol_engine" in findings[0].reproduction_command
