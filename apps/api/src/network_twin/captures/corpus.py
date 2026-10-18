@@ -57,7 +57,10 @@ class CaptureCorpus:
         item = self.get_capture(capture_id)
         if not item:
             raise KeyError(f"Capture fixture '{capture_id}' not found in corpus manifest.")
-        path = self.directory / item.file_name
+        safe_name = Path(item.file_name).name
+        path = (self.directory / safe_name).resolve()
+        if not path.is_relative_to(self.directory.resolve()):
+            raise ValueError(f"Path traversal detected for capture '{item.file_name}'")
         if not path.exists():
             raise FileNotFoundError(f"Capture file '{item.file_name}' does not exist on disk.")
         return path

@@ -1173,8 +1173,8 @@ class InvestigationEngine:
         _ = self.graph_builder.build_current_graph()
         # Fallback minimal test model if graph is empty
         from network_twin.simulation.models import (
-            Interface,
             IPAddressAssignment,
+            ModelInterface,
             ModelNode,
             ModelNodeType,
         )
@@ -1182,26 +1182,30 @@ class InvestigationEngine:
         mod_id = f"model-auto-{uuid.uuid4().hex[:8]}"
         test_node = ModelNode(
             node_id="router-core-1",
-            name="Core Router 1",
+            label="Core Router 1",
             node_type=ModelNodeType.ROUTER,
             interfaces=[
-                Interface(
+                ModelInterface(
                     interface_id="eth0",
+                    node_id="router-core-1",
                     name="eth0",
-                    ip_assignments=[IPAddressAssignment(ip_address="192.168.1.1", subnet_prefix="192.168.1.0/24")],
+                    ip_assignments=[IPAddressAssignment(ip_address="192.168.1.1", prefix_length=24)],
                     state=AdministrativeState.UP,
                 ),
-                Interface(
+                ModelInterface(
                     interface_id="eth1",
+                    node_id="router-core-1",
                     name="eth1",
-                    ip_assignments=[IPAddressAssignment(ip_address="10.0.0.1", subnet_prefix="10.0.0.0/16")],
+                    ip_assignments=[IPAddressAssignment(ip_address="10.0.0.1", prefix_length=16)],
                     state=AdministrativeState.UP,
                 ),
             ],
-            routes=[
+            routing_table=[
                 RouteEntry(
                     route_id="r-direct-1",
+                    node_id="router-core-1",
                     destination_prefix="192.168.1.0/24",
+                    prefix_length=24,
                     next_hop_ip=None,
                     output_interface_id="eth0",
                     route_type=RouteType.CONNECTED,
@@ -1210,7 +1214,9 @@ class InvestigationEngine:
                 ),
                 RouteEntry(
                     route_id="r-direct-2",
+                    node_id="router-core-1",
                     destination_prefix="10.0.0.0/16",
+                    prefix_length=16,
                     next_hop_ip=None,
                     output_interface_id="eth1",
                     route_type=RouteType.CONNECTED,
@@ -1226,9 +1232,8 @@ class InvestigationEngine:
             name="Automated Grounding Model",
             source_snapshot_id="snap-live",
             source_snapshot_fingerprint="fp-live",
-            nodes=[test_node],
-            links=[],
-            subnets=[],
+            nodes={"router-core-1": test_node},
+            fingerprint=f"fp-{mod_id}",
         )
         self.metadata_store.save_network_model(new_model)
         return new_model

@@ -53,8 +53,8 @@ export const NAVIGATION_TABS: TabDefinition[] = [
   {
     id: 'investigation',
     label: 'Investigation Workspace',
-    phase: 'Phase 08',
-    isImplemented: false,
-    description: 'Evidence-grounded security investigation agents and learned network world model.',
+    phase: 'Phase 10-11',
+    isImplemented: true,
+    description: 'Evidence-grounded security investigation replay, integrity auditing, and counterfactual remediation.',
   },
 ];

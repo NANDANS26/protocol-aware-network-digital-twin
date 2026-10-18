@@ -88,6 +88,9 @@ class AnalysisService:
 
     def analyze_capture(self, filename: str, content: bytes) -> AnalysisJob:
         """Saves capture file, executes C++ engine, persists metadata & Parquet, and extracts intelligence."""
+        if Path(filename).name != filename or ".." in filename:
+            raise ValueError("Invalid filename: Path traversal detected.")
+
         if not self.validate_capture_bytes(content):
             raise ValueError("Invalid capture file: Magic bytes do not match valid PCAP or PCAPNG header.")
 
@@ -103,7 +106,11 @@ class AnalysisService:
         is_pcapng = content[:4] == b"\x0a\x0d\x0d\x0a"
         fmt_name = "PCAPNG" if is_pcapng else "PCAP"
 
-        upload_path = Path(self.config.data_dir) / "uploads" / f"{job_id}_{filename}"
+        safe_filename = Path(filename).name
+        uploads_dir = (Path(self.config.data_dir) / "uploads").resolve()
+        upload_path = (uploads_dir / f"{job_id}_{safe_filename}").resolve()
+        if not upload_path.is_relative_to(uploads_dir):
+            raise ValueError("Invalid filename: Path traversal detected.")
         events_path = Path(self.config.data_dir) / "results" / f"{job_id}.events.jsonl"
         summary_path = Path(self.config.data_dir) / "results" / f"{job_id}.summary.json"
 

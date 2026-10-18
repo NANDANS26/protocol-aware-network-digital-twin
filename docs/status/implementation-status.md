@@ -1,6 +1,6 @@
 # Implementation Status: Protocol Digital Twin & Security Verification Engine
 
-## Phase 11 Status Classification: Fully Operational
+## Phase 12 Status Classification: Release Ready
 
 This document explicitly separates **Completed**, **Partial / Transitional**, **Planned**, and **Blocked** work across all platform subsystems.
 
@@ -71,7 +71,10 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 | **Verifiable Audit Pack Export** | Self-contained, portable JSON export containing execution metadata, canonical evidence graph, integrity report, ranked findings, and step-by-step external audit reproduction instructions. | Verified in `test_export_audit_pack`. |
 | **Investigation Replay REST API** | 6 endpoints under `/api/v1/twin/investigations`: `GET /{id}/executions`, `GET /{id}/executions/{exec_id}`, `POST /{id}/executions/{exec_id}/verify-integrity`, `POST /{id}/executions/{exec_id}/replay`, `GET /{id}/executions/{exec_id}/compare/{other_id}`, and `GET /{id}/executions/{exec_id}/audit-pack`. | Verified in `test_investigation_replay_api_endpoints`. |
 | **React Replay Cockpit & Integrity Ledger** | Integrated into `InvestigationWorkbench.tsx`: Execution History & Replay Audit Ledger, inline cryptographic integrity report with disclaimer, Replay Comparison modal, and Audit Pack export viewer. | 6 passed Vitest tests in `InvestigationWorkbench.test.tsx`. |
-| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 26/26 tests, 183 assertions), pytest (176 tests), and vitest (46 tests). |
+| **Phase 12: End-to-End System Integration** | Deterministic 15-step acceptance scenario (`test_full_system_e2e_acceptance_scenario`) executing raw PCAP → C++ engine → Parquet/DuckDB → SQLite → Topology reconstruction → Forwarding reachability & invariants → Predictive pipeline → Incident investigation → Evidence graph → Counterfactual remediation → Persistence → Integrity audit → Replay (`REPLAY_IDENTICAL`) → Audit pack export & independent hash recalculation. | Verified in `test_full_system_integration.py` (passes in 0.67s). |
+| **Cross-Component Contracts & Failure Recovery** | Clean database schema migration v1 through v8 verification, migration idempotency, path traversal injection rejection on upload and corpus routes, malformed/empty PCAP safe rejection, unmodeled endpoint handling (`INSUFFICIENT_EVIDENCE`), missing dependency replay refusal (`REPLAY_NOT_POSSIBLE`), and evidence tampering detection (`IntegrityStatus.MODIFIED`). | Verified in `test_reliability_and_contracts.py` (8 passed tests). |
+| **Investigation Workspace Navigation Wiring** | Enabled `isImplemented: true` in `navigation.ts`, wired active routing in `App.tsx` to render `<InvestigationWorkbench />`, and updated shell navigation tests. | Verified in `App.test.tsx` (all 3 tests passing). |
+| **Quality Gates & System Verification** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors, formatted), typecheckers (tsc 0 errors), doctest (C++ 26/26 tests, 183 assertions), pytest (185 tests), vitest (46 tests), and production build (`tsc && vite build`). |
 
 ---
 
@@ -82,13 +85,8 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 
 ---
 
-### 3. Planned Work (Phase 12)
-
-- **Phase 12**: Autonomous Multi-Twin Federation, Cross-Domain Attestation, Formal SMT Solver Symbolic Reachability, and Dynamic Chaos Injection.
-
----
-
-### 4. Blocked Work / Known Limitations
+### 3. Blocked Work / Known Limitations
 
 - **Live Capture on Windows Host without Npcap**: Live network interface capture requires administrative privileges and an installed Npcap/WinPcap driver. In the current development environment without Npcap, live capture is gracefully disabled, while file-based PCAP and synthetic packet sources are 100% functional.
+- **Predictive World Model Generalization**: Flow predictions utilize standard machine learning classifiers (Random Forest, Ridge) trained on windowed capture features. Because network topologies and traffic distributions vary across enterprise environments, predictive outputs are explicitly categorized as `PREDICTED` and are never permitted to override deterministic forwarding simulations or security invariants.
 

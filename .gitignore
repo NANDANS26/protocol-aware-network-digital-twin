@@ -52,6 +52,7 @@ pnpm-debug.log*
 apps/web/dist/
 apps/web/coverage/
 .turbo/
+.vite/
 
 # C++ and CMake
 build/

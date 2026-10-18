@@ -7,6 +7,7 @@ import { OverviewView } from './views/OverviewView';
 import { ObservatoryView } from './views/ObservatoryView';
 import { NetworkTwinView } from './views/NetworkTwinView';
 import { SecurityTestingWorkbench } from './views/twin/SecurityTestingWorkbench';
+import { InvestigationWorkbench } from './views/twin/InvestigationWorkbench';
 import { PlaceholderView } from './views/PlaceholderView';
 import { NAVIGATION_TABS, type NavigationTab } from './types/navigation';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
@@ -105,6 +106,8 @@ export const App: React.FC = () => {
             <NetworkTwinView />
           ) : currentTab === 'research' ? (
             <SecurityTestingWorkbench />
+          ) : currentTab === 'investigation' ? (
+            <InvestigationWorkbench />
           ) : (
             <PlaceholderView tab={activeTabDefinition} />
           )}

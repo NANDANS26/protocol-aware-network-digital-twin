@@ -27,6 +27,7 @@ vi.mock('../api/client', () => {
       listSnapshots: vi.fn().mockResolvedValue([]),
       listCaptures: vi.fn().mockResolvedValue([]),
       listImports: vi.fn().mockResolvedValue([]),
+      listInvestigations: vi.fn().mockResolvedValue([]),
     },
   };
 });
@@ -143,6 +144,15 @@ describe('Application Shell & Navigation', () => {
       expect(screen.getByTestId('placeholder-view')).toBeInTheDocument();
       expect(screen.getByText(/Module Status: Planned Architecture Component/i)).toBeInTheDocument();
       expect(screen.getByText(/Reliability & Truthfulness Policy/i)).toBeInTheDocument();
+    });
+
+    // Click on Investigation Workspace tab -> renders operational Investigation Workbench
+    const invBtn = screen.getByRole('button', { name: /Investigation Workspace/i });
+    fireEvent.click(invBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Evidence-Backed Network Incident Investigation & Reproducible Replay/i)).toBeInTheDocument();
+      expect(screen.getByText(/Phase 11 Verified/i)).toBeInTheDocument();
     });
   });
 });
