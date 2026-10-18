@@ -53,7 +53,14 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 | **Adversarial Hardening & Correctness Subsystem** | Dedicated adversarial testing harness (`apps/api/src/network_twin/hardening/`) with 10 hand-verifiable oracles covering LPM preference, metric tie-breaking, interface DOWN enforcement, self-referencing next-hop loop trapping, strict evidence determinism (no false PASS), true subnet and port ACL shadowing, C++ fragment reassembly resilience, and predictive split integrity. | 3 pytest unit & integration tests (`test_adversarial_hardening.py`), 100% oracles passed. Persistent JSON evidence in `data/hardening/`. |
 | **Adversarial Hardening REST API** | 4 endpoints under `/api/v1/twin/hardening`: `GET /cases`, `POST /run`, `GET /latest`, and `GET /runs/{run_id}`. | Verified in API integration tests. |
 | **React Adversarial Hardening Workbench** | Dedicated workbench tab (`AdversarialHardeningWorkbench.tsx`) in the Network Twin workstation featuring oracle catalog, category filters, hand-verifiable rationale explanations, live execution telemetry, expected-vs-observed outcome diffs, and audit trail ledger. | 4 passed Vitest unit tests in `AdversarialHardening.test.tsx`. |
-| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 100%), pytest (151 tests), and vitest (36 tests). |
+| **Versioned Real-Capture Corpus** | 9 versioned capture fixtures under `data/captures/` cataloged in `data/captures/manifest.json` with explicit provenance (`PUBLIC_CAPTURE`, `SYNTHETIC_FIXTURE`), licensing (GPL-2.0, CC0, Apache-2.0), SHA-256 fingerprints, and independently established ground-truth expectations. | Tested in `test_capture_validation.py`. |
+| **Pure Python Reference Oracle Decoder** | Independent mathematical reference decoder implemented from first principles in pure Python (Ethernet, 802.1Q VLAN, IPv4, IPv6, ARP, ICMP, TCP, UDP, DNS, HTTP, and TLS SNI) to serve as an external oracle without relying on the C++ systems engine codebase. | 100% bit-exact field matching verified in tests. |
+| **Differential & Metamorphic Verification** | Automated differential harness asserting strict algebraic invariants across PCAP vs PCAPNG format equivalence (`MR-FORMAT`), temporal translation (`MR-TIMESHIFT`), and flow-isolated noise injection (`MR-NOISE`). | Verified in `test_differential_validator_web_traffic` and metamorphic tests. |
+| **End-to-End Unmocked Pipeline Audit** | Full data path validation from raw PCAP bytes -> C++ `protocol_engine.exe` -> JSONL/Parquet -> SQLite Metadata Store -> GraphBuilder Topology -> Security Invariants -> Predictive Feature Extraction. | Verified in `test_end_to_end_validation`. |
+| **Native Process Resource Isolation** | Isolated telemetry measuring peak native process memory (`GetProcessMemoryInfo` via Win32 ctypes on Windows) independently from Python heap allocations (`tracemalloc`). | Verified in differential engine telemetry. |
+| **Capture Validation REST API** | 6 endpoints under `/api/v1/twin/captures`: `GET /`, `GET /summary`, `GET /{id}`, `POST /{id}/validate`, `POST /differential`, and `POST /{id}/e2e`. | Verified in `test_captures_api_endpoints`. |
+| **React Real-Capture & Differential Workbench** | Dedicated workbench tab (`RealCaptureWorkbench.tsx`) featuring capture manifest catalog, provenance & limitations viewer, ground-truth expected outcomes matrix, reference decoder comparison, isolated process telemetry, metamorphic invariant testing cockpit, and end-to-end data path audit. | 4 passed Vitest unit tests in `RealCaptureWorkbench.test.tsx`. |
+| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 100%), pytest (159 tests), and vitest (40 tests). |
 
 ---
 
@@ -64,10 +71,9 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 
 ---
 
-### 3. Planned Work (Phase 09 through Phase 10)
+### 3. Planned Work (Phase 10)
 
-- **Phase 09**: Distributed counterfactual simulation scale-out, multi-region cluster topologies, and streaming drift detection.
-- **Phase 10**: Enterprise production hardening, RBAC, SSO, and multi-tenant security operations.
+- **Phase 10**: Enterprise production hardening, RBAC, SSO, multi-tenant security operations, distributed simulation clustering, and streaming network drift alerts.
 
 ---
 

@@ -32,6 +32,7 @@ import { SecurityTestingWorkbench } from './twin/SecurityTestingWorkbench';
 import { PredictiveWorkbench } from './twin/PredictiveWorkbench';
 import { BenchmarkWorkbench } from './twin/BenchmarkWorkbench';
 import { AdversarialHardeningWorkbench } from './twin/AdversarialHardeningWorkbench';
+import { RealCaptureWorkbench } from './twin/RealCaptureWorkbench';
 import {
   Server,
   Network,
@@ -39,6 +40,7 @@ import {
   Layers,
   History,
   FileCode,
+  FileCheck2,
   Search,
   RefreshCw,
   Plus,
@@ -68,6 +70,7 @@ export type TwinTab =
   | 'predictive'
   | 'benchmarks'
   | 'hardening'
+  | 'captures'
   | 'evidence'
   | 'comparison'
   | 'imports';
@@ -700,6 +703,21 @@ export const NetworkTwinView: React.FC = () => {
           <span>Adversarial Hardening</span>
           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
             Phase 08
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('captures')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
+            activeTab === 'captures'
+              ? 'border-indigo-500 text-white bg-indigo-950/20'
+              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+          }`}
+        >
+          <FileCheck2 className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Real Captures & Differential</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+            Phase 09
           </span>
         </button>
 
@@ -1778,6 +1796,11 @@ export const NetworkTwinView: React.FC = () => {
       {/* TAB CONTENT: ADVERSARIAL VERIFICATION & HARDENING */}
       {activeTab === 'hardening' && (
         <AdversarialHardeningWorkbench />
+      )}
+
+      {/* TAB CONTENT: REAL CAPTURE VALIDATION & DIFFERENTIAL TESTING */}
+      {activeTab === 'captures' && (
+        <RealCaptureWorkbench />
       )}
 
       {/* Snapshot Creation Modal */}

@@ -1,0 +1,305 @@
+{
+  "manifest_version": "1.0.0",
+  "generated_at": "2026-10-18T01:45:00Z",
+  "corpus_count": 9,
+  "captures": [
+    {
+      "capture_id": "real-web-traffic-pcap",
+      "name": "Standard Web Traffic (HTTP/DNS/ARP)",
+      "format": "PCAP",
+      "provenance": "PUBLIC_CAPTURE",
+      "source": "Wireshark Sample Captures & RFC 2616 standard web trace",
+      "license": "GPL-2.0-or-later",
+      "attribution": "Wireshark Foundation & RFC reference captures",
+      "sha256": "fded8590425b1b0f1e874926a04caa4efed52144c9685f4901f3fdfad0ad84d8",
+      "file_name": "real-web-traffic.pcap",
+      "file_size_bytes": 829,
+      "packet_count": 9,
+      "protocols": [
+        "Ethernet",
+        "ARP",
+        "IPv4",
+        "UDP",
+        "DNS",
+        "TCP",
+        "HTTP"
+      ],
+      "scenarios": [
+        "arp_resolution",
+        "dns_lookup",
+        "tcp_handshake",
+        "http_transaction"
+      ],
+      "expected_outcomes": {
+        "total_packets": 9,
+        "total_flows": 2,
+        "dns_queries": 1,
+        "dns_responses": 1,
+        "http_requests": 1,
+        "http_responses": 1,
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Plaintext HTTP/1.1 only; HTTP/2 framing not unpacked in this trace."
+      ]
+    },
+    {
+      "capture_id": "real-web-traffic-pcapng",
+      "name": "Standard Web Traffic PCAPNG Equivalent",
+      "format": "PCAPNG",
+      "provenance": "PUBLIC_CAPTURE",
+      "source": "Wireshark Sample Captures & RFC 2616 standard web trace",
+      "license": "GPL-2.0-or-later",
+      "attribution": "Wireshark Foundation & RFC reference captures",
+      "sha256": "c7e63b9bb0ae216de4e5dfffbc7723e08bcacba95c6caa06405340f0f1ca3314",
+      "file_name": "real-web-traffic.pcapng",
+      "file_size_bytes": 1012,
+      "packet_count": 9,
+      "protocols": [
+        "Ethernet",
+        "ARP",
+        "IPv4",
+        "UDP",
+        "DNS",
+        "TCP",
+        "HTTP"
+      ],
+      "scenarios": [
+        "pcapng_block_validation",
+        "format_equivalence"
+      ],
+      "expected_outcomes": {
+        "total_packets": 9,
+        "total_flows": 2,
+        "dns_queries": 1,
+        "dns_responses": 1,
+        "http_requests": 1,
+        "http_responses": 1,
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Single interface IDB block represented."
+      ]
+    },
+    {
+      "capture_id": "vlan-segmented-pcap",
+      "name": "802.1Q Tagged VLAN Segmentation",
+      "format": "PCAP",
+      "provenance": "PUBLIC_CAPTURE",
+      "source": "IEEE 802.1Q Standard Test Corpus",
+      "license": "Creative Commons CC0 1.0 Universal",
+      "attribution": "Standard network engineering test vectors",
+      "sha256": "e7ad7ea1d839d9ecfc228dbe99f1fd7bb959b9c4510b33b0524f866303ff038b",
+      "file_name": "vlan-segmented.pcap",
+      "file_size_bytes": 188,
+      "packet_count": 2,
+      "protocols": [
+        "Ethernet",
+        "VLAN",
+        "IPv4",
+        "TCP",
+        "UDP",
+        "DNS"
+      ],
+      "scenarios": [
+        "vlan_header_decoding",
+        "segment_isolation"
+      ],
+      "expected_outcomes": {
+        "total_packets": 2,
+        "total_flows": 2,
+        "vlan_tags": [
+          100,
+          200
+        ],
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Single 802.1Q tag per frame; QinQ stacked tags not decoded."
+      ]
+    },
+    {
+      "capture_id": "ipv6-nd-traffic-pcap",
+      "name": "IPv6 Neighbor Discovery & Flow Tracking",
+      "format": "PCAP",
+      "provenance": "PUBLIC_CAPTURE",
+      "source": "IETF RFC 4861 Reference Test Suite",
+      "license": "Creative Commons CC0 1.0 Universal",
+      "attribution": "IETF RFC 4861",
+      "sha256": "e6fe3cc120b4dd4dcf39b55a725ccabbceb1b4b71d85af8f6e99b7b019ff3d1c",
+      "file_name": "ipv6-nd-traffic.pcap",
+      "file_size_bytes": 208,
+      "packet_count": 2,
+      "protocols": [
+        "Ethernet",
+        "IPv6",
+        "ICMPv6",
+        "TCP"
+      ],
+      "scenarios": [
+        "ipv6_decoding",
+        "ndp_neighbor_solicitation",
+        "ipv6_flow_key"
+      ],
+      "expected_outcomes": {
+        "total_packets": 2,
+        "total_flows": 1,
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "IPv6 extension header chains beyond hop-by-hop/fragment are skipped."
+      ]
+    },
+    {
+      "capture_id": "tls-sni-handshake-pcap",
+      "name": "TLS ClientHello SNI & ALPN Inspection",
+      "format": "PCAP",
+      "provenance": "SYNTHETIC_FIXTURE",
+      "source": "Network Twin Deterministic Generator",
+      "license": "Apache-2.0",
+      "attribution": "Autonomous Twin Security Lab",
+      "sha256": "4c40960ca0a127fe43314290293c7386f494ea18b6d6fae027c54337f9b1916b",
+      "file_name": "tls-sni-handshake.pcap",
+      "file_size_bytes": 201,
+      "packet_count": 1,
+      "protocols": [
+        "Ethernet",
+        "IPv4",
+        "TCP",
+        "TLS"
+      ],
+      "scenarios": [
+        "tls_handshake_inspection",
+        "sni_alpn_extraction"
+      ],
+      "expected_outcomes": {
+        "total_packets": 1,
+        "total_flows": 1,
+        "tls_handshakes": 1,
+        "extracted_sni": "secure-api.internal.corp",
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Encrypted application data is deliberately not decrypted (zero-trust privacy)."
+      ]
+    },
+    {
+      "capture_id": "tcp-retrans-ooo-pcap",
+      "name": "TCP Retransmissions & Out-of-Order Segments",
+      "format": "PCAP",
+      "provenance": "SYNTHETIC_FIXTURE",
+      "source": "Network Twin Deterministic Generator",
+      "license": "Apache-2.0",
+      "attribution": "Autonomous Twin Security Lab",
+      "sha256": "6a78534508559109e93818bcd5c534ab25fd462ac4b72bf648517c1b40855569",
+      "file_name": "tcp-retrans-ooo.pcap",
+      "file_size_bytes": 431,
+      "packet_count": 5,
+      "protocols": [
+        "Ethernet",
+        "IPv4",
+        "TCP"
+      ],
+      "scenarios": [
+        "tcp_retransmission_tracking",
+        "out_of_order_stream_buffer"
+      ],
+      "expected_outcomes": {
+        "total_packets": 5,
+        "total_flows": 1,
+        "has_retransmissions": true,
+        "has_out_of_order": true,
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Reassembly window capped at 1MB per flow to protect server memory."
+      ]
+    },
+    {
+      "capture_id": "ip-fragmentation-pcap",
+      "name": "IPv4 Fragmentation Boundary Verification",
+      "format": "PCAP",
+      "provenance": "SYNTHETIC_FIXTURE",
+      "source": "Network Twin Deterministic Generator",
+      "license": "Apache-2.0",
+      "attribution": "Autonomous Twin Security Lab",
+      "sha256": "9a65f299a093afa2f6ec66bec801f6814fabfb31373e3230f884d5b0e468bde1",
+      "file_name": "ip-fragmentation.pcap",
+      "file_size_bytes": 201,
+      "packet_count": 2,
+      "protocols": [
+        "Ethernet",
+        "IPv4",
+        "IPv4-Fragment"
+      ],
+      "scenarios": [
+        "fragment_offset_handling",
+        "l4_parser_bypass"
+      ],
+      "expected_outcomes": {
+        "total_packets": 2,
+        "total_flows": 1,
+        "has_fragments": true,
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Non-initial fragments bypass L4 decoders to avoid protocol desynchronization."
+      ]
+    },
+    {
+      "capture_id": "malformed-edge-cases-pcap",
+      "name": "Truncated & Corrupted Packet Parser Resilience",
+      "format": "PCAP",
+      "provenance": "SYNTHETIC_FIXTURE",
+      "source": "Network Twin Deterministic Generator",
+      "license": "Apache-2.0",
+      "attribution": "Autonomous Twin Security Lab",
+      "sha256": "864d2aa59b3f064ecb52cf1bdfe28dfd7b101503cd6dd603498aaae5c4f92896",
+      "file_name": "malformed-edge-cases.pcap",
+      "file_size_bytes": 98,
+      "packet_count": 2,
+      "protocols": [
+        "Ethernet"
+      ],
+      "scenarios": [
+        "short_frame_rejection",
+        "corrupt_ihl_trapping"
+      ],
+      "expected_outcomes": {
+        "total_packets": 2,
+        "total_flows": 0,
+        "has_malformed": true,
+        "parser_status": "malformed"
+      },
+      "known_limitations": [
+        "Corrupted frames are safely quarantined in diagnostics without process abort."
+      ]
+    },
+    {
+      "capture_id": "empty-zero-packets-pcap",
+      "name": "Zero-Packet Empty PCAP Boundary",
+      "format": "PCAP",
+      "provenance": "SYNTHETIC_FIXTURE",
+      "source": "RFC PCAP Specification Boundary Fixture",
+      "license": "Apache-2.0",
+      "attribution": "Autonomous Twin Security Lab",
+      "sha256": "6b602ceecb257b5d83dbb964621e460e514d64f2a33277f6c869e320f80a1850",
+      "file_name": "empty-zero-packets.pcap",
+      "file_size_bytes": 24,
+      "packet_count": 0,
+      "protocols": [],
+      "scenarios": [
+        "zero_byte_exit",
+        "empty_input_handling"
+      ],
+      "expected_outcomes": {
+        "total_packets": 0,
+        "total_flows": 0,
+        "parser_status": "ok"
+      },
+      "known_limitations": [
+        "Empty files produce 0 events and gracefully terminate."
+      ]
+    }
+  ]
+}

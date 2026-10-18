@@ -78,11 +78,18 @@ Makefile.cmake
 .vs/
 
 # Database / Analytical fixtures & runtime data
-data/
+data/*
+!data/captures
+data/captures/*
+!data/captures/manifest.json
+!data/captures/*.pcap
+!data/captures/*.pcapng
 *.pcap
 *.pcapng
 !tests/fixtures/*.pcap
 !tests/fixtures/*.pcapng
+!data/captures/*.pcap
+!data/captures/*.pcapng
 *.duckdb
 *.parquet
 migrations/versions/*.pyc

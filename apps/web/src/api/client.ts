@@ -624,6 +624,44 @@ export class NetworkTwinApiClient {
   async getHardeningRun(runId: string): Promise<import('../types/hardening').AdversarialRunSummary> {
     return this.request<import('../types/hardening').AdversarialRunSummary>(`/twin/hardening/runs/${runId}`);
   }
+
+  // --- Phase 09: Real-Capture Validation & Differential Testing ---
+
+  async listCorpusCaptures(): Promise<import('../types/captures').CaptureManifestItem[]> {
+    return this.request<import('../types/captures').CaptureManifestItem[]>('/twin/captures');
+  }
+
+  async getCorpusSummary(): Promise<import('../types/captures').CorpusSummaryResponse> {
+    return this.request<import('../types/captures').CorpusSummaryResponse>('/twin/captures/summary');
+  }
+
+  async getCorpusCapture(captureId: string): Promise<import('../types/captures').CaptureManifestItem> {
+    return this.request<import('../types/captures').CaptureManifestItem>(`/twin/captures/${captureId}`);
+  }
+
+  async validateCapture(captureId: string): Promise<import('../types/captures').CaptureValidationReport> {
+    return this.request<import('../types/captures').CaptureValidationReport>(`/twin/captures/${captureId}/validate`, {
+      method: 'POST',
+    });
+  }
+
+  async runDifferentialTest(req: {
+    relation_type: import('../types/captures').MetamorphicRelationType;
+    base_capture_id: string;
+    transformed_capture_id?: string | null;
+    shift_seconds?: number;
+  }): Promise<import('../types/captures').DifferentialTestResult> {
+    return this.request<import('../types/captures').DifferentialTestResult>('/twin/captures/differential', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  }
+
+  async runE2EValidation(captureId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(`/twin/captures/${captureId}/e2e`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();
