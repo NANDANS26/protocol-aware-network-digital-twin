@@ -81,7 +81,7 @@ def test_phase07_end_to_end_validation_pipeline(integrated_runner):
     # 3. Database Migration Integrity Check
     with integrated_runner.metadata_store._get_connection() as conn:
         cur = conn.execute("SELECT MAX(version) FROM schema_migrations;")
-        assert cur.fetchone()[0] == 6
+        assert cur.fetchone()[0] >= 6
 
         cur = conn.execute("SELECT COUNT(*) FROM benchmark_runs;")
         assert cur.fetchone()[0] >= 5

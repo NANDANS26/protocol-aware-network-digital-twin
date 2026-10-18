@@ -93,6 +93,9 @@ data/captures/*
 !data/captures/*.pcapng
 *.duckdb
 *.parquet
+*.sqlite
+*.sqlite3
+*.db
 migrations/versions/*.pyc
 
 # IDEs

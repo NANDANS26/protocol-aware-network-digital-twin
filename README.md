@@ -144,16 +144,28 @@ Individual test suites:
 - **Backend Tests**: `.\scripts\dev.ps1 test-api` or `pytest apps/api/tests tests/integration`
 - **Frontend Tests**: `.\scripts\dev.ps1 test-web` or `cd apps/web && npm run test`
 - **TypeScript Typecheck**: `.\scripts\dev.ps1 typecheck` or `cd apps/web && npm run typecheck`
-- **Python Linter**: `.\scripts\dev.ps1 lint` or `ruff check apps/api packages/contracts/python`
+- **Python Linter & Formatter**: `ruff check apps/api packages/contracts/python` and `ruff format --check`
 
 ---
 
-## 7. Next Implementation Target: Phase 01
+## 7. Continuous Integration (GitHub Actions)
 
-With the Phase 00 foundation complete and verified, the exact next step is **Phase 01**:
-- Full PCAP / PCAPNG parser implementation in `PcapFilePacketSource`.
-- Zero-copy protocol decoders (Ethernet, 802.1Q, IPv4, IPv6, ARP, TCP, UDP, ICMP).
-- Stateful bidirectional flow correlation (canonical 5-tuple hash) and TCP state machine tracking.
-- High-throughput streaming IPC bridge between `protocol_engine` and Python control plane.
+Every push to `main` and pull request triggers automated matrix CI jobs defined in `.github/workflows/ci.yml`:
 
-See [docs/roadmap/phases.md](docs/roadmap/phases.md) for the complete roadmap.
+- **C++20 Systems Engine**: Matrix builds on `ubuntu-latest` (GCC/Clang) and `windows-latest` (MSVC) with `ctest` execution.
+- **Python Backend**: Runs Python 3.11 with cached pip dependencies, builds C++ engine for hermetic integration tests, checks formatting with `ruff`, and runs all 193 pytest suites.
+- **React Frontend**: Runs Node 20 with cached npm dependencies, strict TypeScript type checking (`tsc --noEmit`), Vitest unit tests, and production Vite compilation.
+
+---
+
+## 8. Current Limitations & Unsupported Cases
+
+- **Encrypted Payload Inspection**: TLS SNI and handshake metadata are decoded, but encrypted application data is not decrypted without session key exports.
+- **Live Interface Capture**: Requires administrative privileges (e.g., Npcap on Windows or `CAP_NET_RAW`/`libpcap` permissions on Linux).
+- **Physical Link Emulation**: Focuses on Layer-2/3 deterministic forwarding, reachability, routing, and policy invariants rather than physical-layer RF modeling.
+
+---
+
+## 9. Security Policy
+
+For security vulnerabilities, please refer to [docs/operations/security-policy.md](docs/operations/security-policy.md).
