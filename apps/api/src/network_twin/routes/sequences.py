@@ -29,7 +29,6 @@ from network_twin.testing.sequence_minimizer import (
 )
 from network_twin.testing.sequence_models import (
     ProtocolSequence,
-    SequenceExecutionResult,
     SequenceFinding,
     SequenceRegressionFixture,
     SequenceReproductionMetadata,
@@ -69,25 +68,27 @@ async def list_sequences(
     return metadata_store.list_sequences(sequence_type=sequence_type)
 
 
+@router.post("/generate-suite", response_model=list[ProtocolSequence])
 @router.post("/generate", response_model=list[ProtocolSequence])
-async def generate_sequences(req: SequenceGenerateRequest) -> list[ProtocolSequence]:
+async def generate_sequences(req: SequenceGenerateRequest | None = None) -> list[ProtocolSequence]:
     """Generates canonical protocol sequences and optionally executes them."""
-    if req.sequence_type == SequenceType.TCP_HANDSHAKE_TEARDOWN:
-        seqs = [generate_tcp_handshake_teardown(seed=req.seed)]
-    elif req.sequence_type == SequenceType.TCP_RETRANSMISSION_OOO:
-        seqs = [generate_tcp_retransmission_and_ooo(seed=req.seed)]
-    elif req.sequence_type == SequenceType.TCP_RST_AND_ABORT:
-        seqs = [generate_tcp_rst_and_abort(seed=req.seed)]
-    elif req.sequence_type == SequenceType.TCP_SIMULTANEOUS_FLOWS:
-        seqs = [generate_tcp_simultaneous_flows(seed=req.seed)]
-    elif req.sequence_type == SequenceType.IP_FRAGMENTATION:
-        seqs = [generate_ip_fragmentation(seed=req.seed)]
-    elif req.sequence_type == SequenceType.HTTP_SEGMENTED_STREAM:
-        seqs = [generate_segmented_http_stream(seed=req.seed)]
+    r = req or SequenceGenerateRequest()
+    if r.sequence_type == SequenceType.TCP_HANDSHAKE_TEARDOWN:
+        seqs = [generate_tcp_handshake_teardown(seed=r.seed)]
+    elif r.sequence_type == SequenceType.TCP_RETRANSMISSION_OOO:
+        seqs = [generate_tcp_retransmission_and_ooo(seed=r.seed)]
+    elif r.sequence_type == SequenceType.TCP_RST_AND_ABORT:
+        seqs = [generate_tcp_rst_and_abort(seed=r.seed)]
+    elif r.sequence_type == SequenceType.TCP_SIMULTANEOUS_FLOWS:
+        seqs = [generate_tcp_simultaneous_flows(seed=r.seed)]
+    elif r.sequence_type == SequenceType.IP_FRAGMENTATION:
+        seqs = [generate_ip_fragmentation(seed=r.seed)]
+    elif r.sequence_type == SequenceType.HTTP_SEGMENTED_STREAM:
+        seqs = [generate_segmented_http_stream(seed=r.seed)]
     else:
-        seqs = generate_all_canonical_sequences(seed=req.seed)
+        seqs = generate_all_canonical_sequences(seed=r.seed)
 
-    runner = SequenceRunner() if req.execute_immediately else None
+    runner = SequenceRunner() if r.execute_immediately else None
 
     for s in seqs:
         metadata_store.save_sequence(s)
@@ -162,20 +163,47 @@ async def get_sequence(sequence_id: str) -> ProtocolSequence:
     return seq
 
 
-@router.post("/{sequence_id}/run", response_model=SequenceExecutionResult)
-async def run_sequence(sequence_id: str, req: SequenceRunRequest) -> SequenceExecutionResult:
+@router.post("/{sequence_id}/run")
+async def run_sequence(sequence_id: str, req: SequenceRunRequest | None = None):
     """Executes a stored sequence through the C++ protocol engine."""
     seq = metadata_store.get_sequence(sequence_id)
     if not seq:
         raise HTTPException(status_code=404, detail=f"Sequence not found: {sequence_id}")
 
     runner = SequenceRunner()
-    res, findings = runner.execute(seq, fault_injection=req.fault_injection)
+    fault = req.fault_injection if req else None
+    res, findings = runner.execute(seq, fault_injection=fault)
 
     for f in findings:
         metadata_store.save_sequence_finding(f)
 
-    return res
+    res_dict = res.model_dump()
+    res_dict["execution"] = res.model_dump()
+    res_dict["findings"] = [f.model_dump() for f in findings]
+    return res_dict
+
+
+@router.post("/findings/{finding_id}/minimize", response_model=SequenceReproductionMetadata)
+async def minimize_finding(finding_id: str) -> SequenceReproductionMetadata:
+    """Runs delta debugging sequence minimizer directly on a finding."""
+    findings = metadata_store.list_sequence_findings()
+    target_finding = next((f for f in findings if f.finding_id == finding_id), None)
+    if not target_finding:
+        raise HTTPException(status_code=404, detail=f"Finding not found: {finding_id}")
+
+    seq = metadata_store.get_sequence(target_finding.sequence_id)
+    if not seq:
+        raise HTTPException(status_code=404, detail="Underlying sequence not found.")
+
+    minimizer = SequenceMinimizer()
+    minimized_seq, meta = minimizer.minimize(seq, target_finding)
+
+    metadata_store.save_sequence(minimized_seq)
+    target_finding.minimized = True
+    target_finding.minimized_sequence_id = minimized_seq.sequence_id
+    metadata_store.save_sequence_finding(target_finding)
+
+    return meta
 
 
 @router.post("/{sequence_id}/minimize")
@@ -208,6 +236,7 @@ async def minimize_sequence(sequence_id: str):
     }
 
 
+@router.get("/findings/{finding_id}/bundle")
 @router.get("/findings/{finding_id}/export")
 async def export_finding_bundle(finding_id: str):
     """Exports a self-contained reproduction ZIP bundle for a finding."""
@@ -240,11 +269,15 @@ async def export_finding_bundle(finding_id: str):
     )
 
 
+@router.post("/findings/{finding_id}/promote-regression", response_model=SequenceRegressionFixture)
 @router.post("/findings/{finding_id}/promote", response_model=SequenceRegressionFixture)
-async def promote_sequence_finding(finding_id: str, req: SequencePromoteRequest) -> SequenceRegressionFixture:
+async def promote_sequence_finding(
+    finding_id: str, req: SequencePromoteRequest | None = None
+) -> SequenceRegressionFixture:
     """Promotes a triaged finding to a permanent regression fixture."""
+    r = req or SequencePromoteRequest()
     try:
-        return metadata_store.promote_sequence_regression(finding_id=finding_id, name=req.name)
+        return metadata_store.promote_sequence_regression(finding_id=finding_id, name=r.name)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
 

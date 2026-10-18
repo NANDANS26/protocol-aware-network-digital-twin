@@ -101,3 +101,78 @@ def test_segment_inferrer():
     seg2 = inferrer.observe_ip("192.168.1.100", now, "cap-1")
     assert seg2.observed_host_count == 2
     assert seg2.gateway_ip == "192.168.1.1"
+
+
+def test_model_backward_compatible_aliases():
+    from network_twin.investigations.models import (
+        EvidenceSufficiency,
+        InvestigationCase,
+        InvestigationScope,
+        InvestigationType,
+    )
+    from network_twin.models.intelligence import (
+        Asset,
+        EvidenceClassification,
+        TopologyEdge,
+        TopologyEdgeType,
+        TopologyNode,
+        TopologyNodeType,
+        TopologySnapshot,
+    )
+
+    now = datetime.now(UTC)
+
+    # 1. Asset conflict_reasons alias
+    asset = Asset(
+        asset_id="asset-1",
+        primary_ip="10.0.0.1",
+        first_seen=now,
+        last_seen=now,
+        conflicts=["MAC mismatch: 00:11 vs 22:33"],
+    )
+    assert asset.conflict_reasons == ["MAC mismatch: 00:11 vs 22:33"]
+    assert asset.conflicts == ["MAC mismatch: 00:11 vs 22:33"]
+
+    # 2. TopologyNode id alias
+    node = TopologyNode(
+        node_id="node-123",
+        node_type=TopologyNodeType.ASSET,
+        label="10.0.0.1",
+    )
+    assert node.id == "node-123"
+    assert node.node_id == "node-123"
+
+    # 3. TopologyEdge id alias
+    edge = TopologyEdge(
+        edge_id="edge-456",
+        source_node_id="node-1",
+        target_node_id="node-2",
+        edge_type=TopologyEdgeType.OBSERVED_COMMUNICATION,
+        evidence_class=EvidenceClassification.DIRECT_OBSERVATION,
+    )
+    assert edge.id == "edge-456"
+    assert edge.edge_id == "edge-456"
+
+    # 4. TopologySnapshot created_at_iso
+    snapshot = TopologySnapshot(
+        snapshot_id="snap-789",
+        name="Baseline Snapshot",
+        created_at=now,
+        node_count=5,
+        edge_count=4,
+    )
+    assert snapshot.created_at_iso == now.isoformat()
+
+    # 5. InvestigationCase known_limitations alias
+    case = InvestigationCase(
+        investigation_id="inv-101",
+        title="Test Investigation",
+        investigation_type=InvestigationType.CONNECTIVITY_FAILURE,
+        scope=InvestigationScope(source_ip="10.0.0.1", destination_ip="10.0.0.2"),
+        sufficiency=EvidenceSufficiency.SUFFICIENT,
+        created_at_iso=now.isoformat(),
+        updated_at_iso=now.isoformat(),
+        explicit_limitations=["Packet payload truncated beyond 64 bytes"],
+    )
+    assert case.known_limitations == ["Packet payload truncated beyond 64 bytes"]
+    assert case.explicit_limitations == ["Packet payload truncated beyond 64 bytes"]

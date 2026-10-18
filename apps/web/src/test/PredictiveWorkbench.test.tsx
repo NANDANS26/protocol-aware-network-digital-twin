@@ -133,7 +133,7 @@ describe('PredictiveWorkbench Component', () => {
     render(<PredictiveWorkbench />);
 
     expect(screen.getByText('Predictive Network World Model')).toBeInTheDocument();
-    expect(screen.getByText('Phase 06 Operational')).toBeInTheDocument();
+    expect(screen.getByText('Predictive Engine Active')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText('Canonical Diurnal Flow Volume')).toBeInTheDocument();

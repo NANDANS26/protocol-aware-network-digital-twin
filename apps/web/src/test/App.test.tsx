@@ -78,9 +78,12 @@ describe('Application Shell & Navigation', () => {
     render(<App />);
 
     expect(screen.getByText(/Protocol Digital Twin/i)).toBeInTheDocument();
-    expect(screen.getByText(/Overview & Foundation/i)).toBeInTheDocument();
-    expect(screen.getByText(/Network Observatory/i)).toBeInTheDocument();
-    expect(screen.getByText(/Network Twin/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /System Overview/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Network Observatory/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Network Digital Twin/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Scenario Laboratory/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Protocol Research Lab/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Investigation Workspace/i })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText(/API Live \(0\.1\.0\)/i)).toBeInTheDocument();
@@ -108,7 +111,7 @@ describe('Application Shell & Navigation', () => {
     });
   });
 
-  it('navigates to planned placeholder views truthfully without fake metrics', async () => {
+  it('navigates across integrated operational views truthfully', async () => {
     vi.mocked(apiClient.getHealth).mockResolvedValue(mockHealth);
     vi.mocked(apiClient.getReadiness).mockResolvedValue(mockHealth);
 
@@ -118,7 +121,7 @@ describe('Application Shell & Navigation', () => {
       expect(screen.getByText(/API Live \(0\.1\.0\)/i)).toBeInTheDocument();
     });
 
-    // Click on Network Observatory tab -> renders real Phase 01 view
+    // Click on Network Observatory tab -> renders real observatory view
     const observatoryBtn = screen.getByRole('button', { name: /Network Observatory/i });
     fireEvent.click(observatoryBtn);
 
@@ -127,23 +130,22 @@ describe('Application Shell & Navigation', () => {
       expect(screen.getByText(/Upload PCAP \/ PCAPNG/i)).toBeInTheDocument();
     });
 
-    // Click on Network Twin tab (Phase 02) -> renders operational Network Twin view
-    const twinBtn = screen.getByRole('button', { name: /Network Twin/i });
+    // Click on Network Digital Twin tab -> renders operational Network Twin view
+    const twinBtn = screen.getByRole('button', { name: /Network Digital Twin/i });
     fireEvent.click(twinBtn);
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: /Network Digital Twin/i })).toBeInTheDocument();
-      expect(screen.getByText(/Phase 0[234] Operational/i)).toBeInTheDocument();
+      expect(screen.getByText(/Twin Operational/i)).toBeInTheDocument();
     });
 
-    // Click on Scenario Laboratory tab -> renders planned placeholder view truthfully
+    // Click on Scenario Laboratory tab -> renders operational Scenario Laboratory
     const labBtn = screen.getByRole('button', { name: /Scenario Laboratory/i });
     fireEvent.click(labBtn);
 
     await waitFor(() => {
-      expect(screen.getByTestId('placeholder-view')).toBeInTheDocument();
-      expect(screen.getByText(/Module Status: Planned Architecture Component/i)).toBeInTheDocument();
-      expect(screen.getByText(/Reliability & Truthfulness Policy/i)).toBeInTheDocument();
+      expect(screen.getByTestId('scenario-laboratory')).toBeInTheDocument();
+      expect(screen.getByText(/Deterministic Security Verification & What-If Simulation/i)).toBeInTheDocument();
     });
 
     // Click on Investigation Workspace tab -> renders operational Investigation Workbench
@@ -152,7 +154,7 @@ describe('Application Shell & Navigation', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Evidence-Backed Network Incident Investigation & Reproducible Replay/i)).toBeInTheDocument();
-      expect(screen.getByText(/Phase 11 Verified/i)).toBeInTheDocument();
+      expect(screen.getByText(/Replay & Integrity Verified/i)).toBeInTheDocument();
     });
   });
 });

@@ -6,13 +6,15 @@ import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 interface SubsystemCardProps {
   id: string;
   name: string;
-  phase: string;
+  category?: string;
+  phase?: string;
   report?: SubsystemReport;
   description: string;
 }
 
 export const SubsystemCard: React.FC<SubsystemCardProps> = ({
   name,
+  category,
   phase,
   report,
   description,
@@ -44,7 +46,7 @@ export const SubsystemCard: React.FC<SubsystemCardProps> = ({
           </div>
           <div>
             <h3 className="font-semibold text-sm text-gray-100">{name}</h3>
-            <span className="text-[11px] font-mono text-gray-400">{phase}</span>
+            <span className="text-[11px] font-mono text-gray-400">{category || phase}</span>
           </div>
         </div>
 

@@ -372,7 +372,7 @@ describe('NetworkTwinView Workstation', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1, name: /Network Digital Twin/i })).toBeInTheDocument();
-      expect(screen.getByText(/Phase 0[234] Operational/i)).toBeInTheDocument();
+      expect(screen.getByText(/Twin Operational/i)).toBeInTheDocument();
       expect(screen.getByText('app-server.corp.local')).toBeInTheDocument();
     });
 

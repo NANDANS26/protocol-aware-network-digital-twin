@@ -9,7 +9,8 @@ export type NavigationTab =
 export interface TabDefinition {
   id: NavigationTab;
   label: string;
-  phase: string;
+  statusLabel: string;
+  phase?: string;
   isImplemented: boolean;
   description: string;
 }
@@ -17,43 +18,49 @@ export interface TabDefinition {
 export const NAVIGATION_TABS: TabDefinition[] = [
   {
     id: 'overview',
-    label: 'Overview & Foundation',
-    phase: 'Phase 00',
+    label: 'System Overview',
+    statusLabel: 'Ready',
+    phase: 'Ready',
     isImplemented: true,
-    description: 'Engineering baseline, system lifecycle, subsystem operational status, and contract verification.',
+    description: 'Engineering baseline, system lifecycle, subsystem operational status, and real platform metrics.',
   },
   {
     id: 'observatory',
     label: 'Network Observatory',
-    phase: 'Phase 01',
+    statusLabel: 'Live',
+    phase: 'Live',
     isImplemented: true,
     description: 'High-throughput packet capture, C++ decoder pipeline, and protocol-aware flow stream.',
   },
   {
     id: 'twin',
-    label: 'Network Twin',
-    phase: 'Phase 02',
+    label: 'Network Digital Twin',
+    statusLabel: 'Active',
+    phase: 'Active',
     isImplemented: true,
     description: 'Evidence-based topology reconstruction, asset discovery, DNS/flow correlation, and versioned snapshots.',
   },
   {
     id: 'laboratory',
     label: 'Scenario Laboratory',
-    phase: 'Phase 06',
-    isImplemented: false,
+    statusLabel: 'Verified',
+    phase: 'Verified',
+    isImplemented: true,
     description: 'Deterministic security-property verification, counterexample generation, and what-if simulation.',
   },
   {
     id: 'research',
     label: 'Protocol Research Lab',
-    phase: 'Phase 04',
+    statusLabel: 'Active',
+    phase: 'Active',
     isImplemented: true,
     description: 'Protocol-aware security test generation, mutation fuzzing, differential testing, and regression suite.',
   },
   {
     id: 'investigation',
     label: 'Investigation Workspace',
-    phase: 'Phase 10-11',
+    statusLabel: 'Audited',
+    phase: 'Audited',
     isImplemented: true,
     description: 'Evidence-grounded security investigation replay, integrity auditing, and counterfactual remediation.',
   },

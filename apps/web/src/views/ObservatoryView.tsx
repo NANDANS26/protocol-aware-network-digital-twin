@@ -99,7 +99,7 @@ export const ObservatoryView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Phase 01 Operational
+                Ingestion Active
               </span>
               <span className="text-xs text-slate-400 font-mono">C++20 Ingestion Engine</span>
             </div>

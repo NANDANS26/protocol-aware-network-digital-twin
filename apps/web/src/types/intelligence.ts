@@ -5,7 +5,13 @@
 
 export type IdentityStatus = 'CONFIRMED' | 'PROBABLE' | 'AMBIGUOUS' | 'CONFLICTING' | 'UNRESOLVED';
 
-export type EvidenceClass = 'DIRECTLY_OBSERVED' | 'CONFIGURED' | 'INFERRED' | 'UNKNOWN';
+export type EvidenceClass =
+  | 'DIRECTLY_OBSERVED'
+  | 'DIRECT_OBSERVATION'
+  | 'CONFIGURED'
+  | 'INFERRED'
+  | 'PREDICTED'
+  | 'UNKNOWN';
 
 export type EvidenceSourceType =
   | 'PCAP_OBSERVATION'
@@ -14,7 +20,7 @@ export type EvidenceSourceType =
   | 'ROUTING_CONFIG'
   | 'INVENTORY_IMPORT';
 
-export type NodeType = 'ASSET' | 'SUBNET' | 'SERVICE' | 'ROUTER';
+export type NodeType = 'ASSET' | 'SUBNET' | 'SERVICE' | 'ROUTER' | 'INTERFACE' | 'DNS_RESOLVER';
 
 export type EdgeType =
   | 'OBSERVED_COMMUNICATION'
@@ -24,17 +30,21 @@ export type EdgeType =
 
 export interface Asset {
   asset_id: string;
+  primary_ip?: string;
   mac_addresses: string[];
   ip_addresses: string[];
   hostnames: string[];
-  device_class: string;
+  device_class?: string;
   identity_status: IdentityStatus;
-  conflict_reasons: string[];
+  conflicts?: string[];
+  conflict_reasons?: string[];
   confidence: number;
+  first_seen?: string;
+  last_seen?: string;
   first_seen_iso?: string;
   last_seen_iso?: string;
-  evidence_ids: string[];
-  metadata: Record<string, unknown>;
+  evidence_ids?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface NetworkSegment {
@@ -90,50 +100,58 @@ export interface EvidenceRecord {
 
 export interface TopologyNode {
   id: string;
+  node_id?: string;
   label: string;
   node_type: NodeType;
-  ip_addresses: string[];
-  mac_addresses: string[];
+  asset_id?: string;
+  segment_id?: string;
+  ip_addresses?: string[];
+  mac_addresses?: string[];
   subnet_cidr?: string;
   service_port?: number;
-  evidence_class: EvidenceClass;
-  metadata: Record<string, unknown>;
+  evidence_class?: EvidenceClass;
+  properties?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TopologyEdge {
   id: string;
+  edge_id?: string;
   source_node_id: string;
   target_node_id: string;
   edge_type: EdgeType;
-  evidence_class: EvidenceClass;
+  evidence_class?: EvidenceClass;
+  primary_protocol?: string;
   protocol?: string;
   port?: number;
   packet_count: number;
   byte_count: number;
-  evidence_ids: string[];
-  is_bidirectional: boolean;
+  evidence_ids?: string[];
+  is_bidirectional?: boolean;
+  properties?: Record<string, unknown>;
 }
 
 export interface TopologyGraph {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
-  generated_at_iso: string;
+  generated_at_iso?: string;
   node_count: number;
   edge_count: number;
-  subnets_count: number;
-  services_count: number;
+  subnets_count?: number;
+  services_count?: number;
 }
 
 export interface TopologySnapshot {
   snapshot_id: string;
   name: string;
-  created_at_iso: string;
-  hash_fingerprint: string;
+  created_at?: string;
+  created_at_iso?: string;
+  hash_fingerprint?: string;
   node_count: number;
   edge_count: number;
   source_captures: string[];
   source_configs: string[];
-  graph_summary: Record<string, unknown>;
+  graph_summary?: Record<string, unknown>;
 }
 
 export interface SnapshotComparisonDiff {

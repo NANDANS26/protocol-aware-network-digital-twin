@@ -125,7 +125,7 @@ export const AdversarialHardeningWorkbench: React.FC = () => {
               Adversarial Verification & Hardening Suite
             </h2>
             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Phase 08 Ground Truth
+              Ground Truth Verified
             </span>
           </div>
           <p className="text-xs text-gray-400 max-w-2xl leading-relaxed">

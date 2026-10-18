@@ -449,7 +449,7 @@ export const InvestigationWorkbench: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Phase 11 Verified
+                Replay & Integrity Verified
               </span>
               <h2 className="text-lg font-bold text-white tracking-wide">
                 Evidence-Backed Network Incident Investigation & Reproducible Replay
@@ -601,7 +601,7 @@ export const InvestigationWorkbench: React.FC = () => {
                     </div>
 
                     <div className="space-y-3">
-                      {currentCase.candidate_explanations.map((cand, idx) => (
+                      {(currentCase.candidate_explanations || []).map((cand, idx) => (
                         <div
                           key={cand.candidate_id}
                           className={`p-3 rounded-md border text-xs space-y-2 ${
@@ -628,8 +628,8 @@ export const InvestigationWorkbench: React.FC = () => {
                             <div>
                               <span className="text-emerald-400 font-semibold">Supporting Evidence:</span>
                               <ul className="list-disc list-inside text-gray-400 mt-0.5">
-                                {cand.supporting_evidence_ids.length > 0 ? (
-                                  cand.supporting_evidence_ids.map((id) => <li key={id} className="font-mono">{id}</li>)
+                                {(cand.supporting_evidence_ids || []).length > 0 ? (
+                                  (cand.supporting_evidence_ids || []).map((id) => <li key={id} className="font-mono">{id}</li>)
                                 ) : (
                                   <li className="italic text-gray-500">None</li>
                                 )}
@@ -638,8 +638,8 @@ export const InvestigationWorkbench: React.FC = () => {
                             <div>
                               <span className="text-amber-400 font-semibold">Missing Evidence / Uncertainty:</span>
                               <ul className="list-disc list-inside text-gray-400 mt-0.5">
-                                {cand.missing_evidence.length > 0 ? (
-                                  cand.missing_evidence.map((item, i) => <li key={i}>{item}</li>)
+                                {(cand.missing_evidence || []).length > 0 ? (
+                                  (cand.missing_evidence || []).map((item, i) => <li key={i}>{item}</li>)
                                 ) : (
                                   <li className="italic text-gray-500">None identified</li>
                                 )}
@@ -671,13 +671,13 @@ export const InvestigationWorkbench: React.FC = () => {
                   </div>
                 </div>
 
-                {currentCase.evidence_graph.nodes.length === 0 ? (
+                {(!currentCase.evidence_graph?.nodes || currentCase.evidence_graph.nodes.length === 0) ? (
                   <div className="text-center py-6 text-gray-500 text-xs italic">
                     Evidence graph is empty. Execute the investigation to collect and correlate network evidence.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {currentCase.evidence_graph.nodes.map((node) => (
+                    {(currentCase.evidence_graph?.nodes || []).map((node) => (
                       <div
                         key={node.evidence_id}
                         className="p-3 rounded bg-gray-900 border border-gray-800 text-xs space-y-1.5 hover:border-gray-700 transition"
@@ -699,17 +699,17 @@ export const InvestigationWorkbench: React.FC = () => {
               </div>
 
               {/* ISOLATED COUNTERFACTUAL REMEDIATION COMPARISONS */}
-              {currentCase.counterfactual_comparisons.length > 0 && (
+              {(currentCase.counterfactual_comparisons || []).length > 0 && (
                 <div className="bg-surface border border-gray-800 rounded-lg p-5 space-y-4">
                   <div className="flex items-center gap-2 border-b border-gray-800 pb-3">
                     <GitBranch className="w-4 h-4 text-purple-400" />
                     <h4 className="text-xs font-bold uppercase tracking-wider text-gray-300">
-                      Isolated Counterfactual Scenarios & Remediation Validation ({currentCase.counterfactual_comparisons.length})
+                      Isolated Counterfactual Scenarios & Remediation Validation ({(currentCase.counterfactual_comparisons || []).length})
                     </h4>
                   </div>
 
                   <div className="space-y-3">
-                    {currentCase.counterfactual_comparisons.map((cf) => (
+                    {(currentCase.counterfactual_comparisons || []).map((cf) => (
                       <div
                         key={cf.scenario_id}
                         className="p-4 rounded-lg bg-gray-900 border border-purple-900/40 text-xs space-y-3"
@@ -765,7 +765,7 @@ export const InvestigationWorkbench: React.FC = () => {
                     </h4>
                   </div>
                   <ul className="space-y-1.5 text-xs text-gray-300">
-                    {currentCase.known_limitations.map((lim, idx) => (
+                    {(currentCase.known_limitations || currentCase.explicit_limitations || []).map((lim, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="text-amber-500 font-mono text-[10px] mt-0.5">&bull;</span>
                         <span className="text-gray-400 text-[11px]">{lim}</span>
@@ -783,7 +783,7 @@ export const InvestigationWorkbench: React.FC = () => {
                     </h4>
                   </div>
                   <ol className="space-y-1.5 text-xs text-gray-300">
-                    {currentCase.reproduction_steps.map((step, idx) => (
+                    {(currentCase.reproduction_steps || []).map((step, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="font-mono text-cyan-400 text-[10px] mt-0.5">{idx + 1}.</span>
                         <span className="text-gray-400 text-[11px] font-mono">{step}</span>
@@ -803,7 +803,7 @@ export const InvestigationWorkbench: React.FC = () => {
                     </h4>
                   </div>
                   <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1 self-start sm:self-auto">
-                    <ShieldCheck className="w-3 h-3" /> Phase 11 Verified
+                    <ShieldCheck className="w-3 h-3" /> Audit Verified
                   </span>
                 </div>
 

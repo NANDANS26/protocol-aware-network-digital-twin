@@ -117,8 +117,9 @@ export interface InvestigationCase {
   candidate_explanations: CandidateExplanation[];
   primary_root_cause_id?: string;
   counterfactual_comparisons: CounterfactualComparison[];
-  known_limitations: string[];
-  reproduction_steps: string[];
+  explicit_limitations?: string[];
+  known_limitations?: string[];
+  reproduction_steps?: string[];
   author?: string;
 }
 

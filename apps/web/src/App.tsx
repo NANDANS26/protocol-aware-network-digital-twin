@@ -8,6 +8,7 @@ import { ObservatoryView } from './views/ObservatoryView';
 import { NetworkTwinView } from './views/NetworkTwinView';
 import { SecurityTestingWorkbench } from './views/twin/SecurityTestingWorkbench';
 import { InvestigationWorkbench } from './views/twin/InvestigationWorkbench';
+import { ScenarioLaboratoryView } from './views/ScenarioLaboratoryView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { NAVIGATION_TABS, type NavigationTab } from './types/navigation';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
@@ -104,6 +105,8 @@ export const App: React.FC = () => {
             <ObservatoryView />
           ) : currentTab === 'twin' ? (
             <NetworkTwinView />
+          ) : currentTab === 'laboratory' ? (
+            <ScenarioLaboratoryView />
           ) : currentTab === 'research' ? (
             <SecurityTestingWorkbench />
           ) : currentTab === 'investigation' ? (

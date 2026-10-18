@@ -58,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
                       : 'bg-slate-800 text-slate-400 border-slate-700'
                   }`}
                 >
-                  {tab.phase}
+                  {tab.statusLabel}
                 </span>
               </button>
             );

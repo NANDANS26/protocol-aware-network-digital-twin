@@ -139,3 +139,67 @@ def test_sequence_finding_promotion_and_regressions_api(client):
     assert list_regr.status_code == 200
     all_regrs = list_regr.json()
     assert any(r["regression_id"] == regr["regression_id"] for r in all_regrs)
+
+
+def test_generate_suite_and_run_without_body(client):
+    # 1. Generate suite via /generate-suite with empty body
+    gen_res = client.post("/api/v1/sequences/generate-suite", json={})
+    assert gen_res.status_code == 200
+    seqs = gen_res.json()
+    assert len(seqs) >= 1
+    seq_id = seqs[0]["sequence_id"]
+
+    # 2. Run sequence without body (reproduces UI call)
+    run_res = client.post(f"/api/v1/sequences/{seq_id}/run")
+    assert run_res.status_code == 200
+    data = run_res.json()
+    # Satisfies both SequenceExecutionResult and { execution, findings }
+    assert "execution" in data
+    assert "findings" in data
+    assert data["exit_code"] == 0
+
+
+def test_finding_minimization_bundle_and_promote_aliases(client):
+    # Generate canonical sequence
+    gen_res = client.post("/api/v1/sequences/generate", json={"seed": 42})
+    assert gen_res.status_code == 200
+    seq = gen_res.json()[0]
+    seq_id = seq["sequence_id"]
+
+    # Save a finding for this sequence
+    finding = SequenceFinding(
+        finding_id=f"find-workflow-{seq_id}",
+        sequence_id=seq_id,
+        severity=SequenceSeverity.MEDIUM,
+        category=SequenceFailureCategory.STATE_TRANSITION_MISMATCH,
+        title="Workflow Finding",
+        description="Finding for minimization and bundle test",
+        root_cause_summary="Simulated cause",
+        reproduction_command=f"protocol_engine.exe test --seq {seq_id}",
+        fixture_path="test.pcap",
+        fixture_hash="hash456",
+        created_at_iso="2026-10-18T12:00:00Z",
+    )
+    metadata_store.save_sequence_finding(finding)
+
+    # 1. Minimize finding via POST /findings/{finding_id}/minimize
+    min_res = client.post(f"/api/v1/sequences/findings/{finding.finding_id}/minimize")
+    assert min_res.status_code == 200
+    min_data = min_res.json()
+    assert "reduction_ratio" in min_data
+    assert min_data["finding_id"] == finding.finding_id
+
+    # 2. Export reproduction ZIP bundle via GET /findings/{finding_id}/bundle
+    bundle_res = client.get(f"/api/v1/sequences/findings/{finding.finding_id}/bundle")
+    assert bundle_res.status_code == 200
+    assert bundle_res.headers["content-type"] == "application/zip"
+    assert len(bundle_res.content) > 0
+
+    # 3. Promote via POST /findings/{finding_id}/promote-regression
+    prom_res = client.post(
+        f"/api/v1/sequences/findings/{finding.finding_id}/promote-regression",
+        json={"name": "Promoted Regression Fixture"},
+    )
+    assert prom_res.status_code == 200
+    fixture = prom_res.json()
+    assert fixture["name"] == "Promoted Regression Fixture"

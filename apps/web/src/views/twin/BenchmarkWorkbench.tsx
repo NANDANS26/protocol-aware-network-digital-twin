@@ -172,7 +172,7 @@ export const BenchmarkWorkbench: React.FC = () => {
               <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
                 Reproducible Validation & Benchmarking
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-mono font-medium">
-                  Phase 07 Operational
+                  Benchmark Suite Active
                 </span>
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">

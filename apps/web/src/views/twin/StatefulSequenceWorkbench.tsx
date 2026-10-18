@@ -193,7 +193,7 @@ export const StatefulSequenceWorkbench: React.FC = () => {
                   Stateful Protocol Fuzzing & Multi-Packet Sequence Verification
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
-                  Phase 05 Active
+                  Sequence Engine Active
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">

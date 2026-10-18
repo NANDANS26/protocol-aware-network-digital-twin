@@ -113,7 +113,7 @@ describe('SecurityTestingWorkbench Component', () => {
     render(<SecurityTestingWorkbench />);
 
     expect(screen.getByText(/Protocol Security Testing & Differential Fuzzing/i)).toBeInTheDocument();
-    expect(screen.getByText(/Phase 04 Operational/i)).toBeInTheDocument();
+    expect(screen.getByText(/Security Suite Active/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getAllByText(/DNS Query Malformation Campaign/i).length).toBeGreaterThanOrEqual(1);

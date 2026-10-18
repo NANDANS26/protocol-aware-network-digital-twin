@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class IdentityStatus(StrEnum):
@@ -100,9 +100,18 @@ class Asset(BaseModel):
     identity_status: IdentityStatus = Field(default=IdentityStatus.PROBABLE)
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     conflicts: list[str] = Field(default_factory=list, description="Any detected identity conflicts")
+    conflict_reasons: list[str] = Field(default_factory=list, description="Backward-compatible alias for conflicts")
     observation_sources: list[str] = Field(
         default_factory=list, description="Captures or imports contributing evidence"
     )
+
+    @model_validator(mode="after")
+    def sync_conflicts(self) -> Self:
+        if self.conflicts and not self.conflict_reasons:
+            self.conflict_reasons = list(self.conflicts)
+        elif self.conflict_reasons and not self.conflicts:
+            self.conflicts = list(self.conflict_reasons)
+        return self
 
 
 # --- Network Segment ---
@@ -174,17 +183,25 @@ class TopologyNode(BaseModel):
     """A node in the reconstructed network graph."""
 
     node_id: str = Field(description="Stable identifier for graph node")
+    id: str | None = Field(default=None, description="Backward-compatible alias for node_id")
     node_type: TopologyNodeType
     label: str = Field(description="Human-readable label (e.g. IP, Hostname, Subnet CIDR)")
     asset_id: str | None = None
     segment_id: str | None = None
     properties: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def sync_id(self) -> Self:
+        if not self.id:
+            self.id = self.node_id
+        return self
+
 
 class TopologyEdge(BaseModel):
     """A directed or bidirectional edge in the network topology graph."""
 
     edge_id: str = Field(description="Stable edge identifier")
+    id: str | None = Field(default=None, description="Backward-compatible alias for edge_id")
     source_node_id: str
     target_node_id: str
     edge_type: TopologyEdgeType
@@ -195,6 +212,12 @@ class TopologyEdge(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     evidence_ids: list[str] = Field(default_factory=list, description="IDs of backing evidence records")
     properties: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def sync_id(self) -> Self:
+        if not self.id:
+            self.id = self.edge_id
+        return self
 
 
 class TopologyGraph(BaseModel):
@@ -218,6 +241,7 @@ class TopologySnapshot(BaseModel):
     snapshot_id: str = Field(description="Unique snapshot fingerprint / identifier")
     name: str = Field(description="Descriptive snapshot title")
     created_at: datetime
+    created_at_iso: str | None = Field(default=None, description="ISO 8601 formatted creation timestamp")
     source_captures: list[str] = Field(default_factory=list, description="IDs of contributing captures")
     source_configs: list[str] = Field(default_factory=list, description="IDs of contributing configuration imports")
     identity_policy_version: str = Field(default="1.0.0")
@@ -227,6 +251,12 @@ class TopologySnapshot(BaseModel):
     unresolved_conflicts: list[str] = Field(default_factory=list)
     schema_version: str = Field(default="1.0.0")
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def sync_created_at_iso(self) -> Self:
+        if not self.created_at_iso and self.created_at:
+            self.created_at_iso = self.created_at.isoformat()
+        return self
 
 
 class SnapshotComparisonDiff(BaseModel):

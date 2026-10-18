@@ -222,7 +222,7 @@ export const SecurityTestingWorkbench: React.FC = () => {
                   Protocol Security Testing & Differential Fuzzing
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
-                  Phase 04 Operational
+                  Security Suite Active
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">

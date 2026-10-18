@@ -5,9 +5,9 @@ Strongly typed models for Phase 10: Evidence-Backed Network Incident Investigati
 from __future__ import annotations
 
 import enum
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class InvestigationType(enum.StrEnum):
@@ -184,9 +184,20 @@ class InvestigationCase(BaseModel):
     explicit_limitations: list[str] = Field(
         default_factory=list, description="Boundaries of what the model can and cannot claim"
     )
+    known_limitations: list[str] = Field(
+        default_factory=list, description="Backward-compatible alias for explicit_limitations"
+    )
     reproduction_steps: list[str] = Field(
         default_factory=list, description="Step-by-step instructions to reproduce findings"
     )
+
+    @model_validator(mode="after")
+    def sync_limitations(self) -> Self:
+        if self.explicit_limitations and not self.known_limitations:
+            self.known_limitations = list(self.explicit_limitations)
+        elif self.known_limitations and not self.explicit_limitations:
+            self.explicit_limitations = list(self.known_limitations)
+        return self
 
 
 class CreateInvestigationRequest(BaseModel):

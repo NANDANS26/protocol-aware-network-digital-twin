@@ -241,7 +241,7 @@ export const PredictiveWorkbench: React.FC = () => {
               <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
                 Predictive Network World Model
                 <span className="text-xs px-2 py-0.5 rounded bg-blue-950/80 text-blue-400 border border-blue-800/60 font-mono font-medium">
-                  Phase 06 Operational
+                  Predictive Engine Active
                 </span>
               </h1>
               <p className="text-xs text-gray-400 mt-0.5">
@@ -1030,7 +1030,7 @@ export const PredictiveWorkbench: React.FC = () => {
               Documented Boundaries & Inviolable Engineering Rules
             </h3>
             <p className="text-xs text-gray-400">
-              Strict rules enforced throughout Phase 06 to ensure scientific integrity and eliminate hallucinations.
+              Strict rules enforced throughout the predictive model to ensure scientific integrity and eliminate hallucinations.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">

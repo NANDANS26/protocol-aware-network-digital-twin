@@ -136,12 +136,12 @@ describe('BenchmarkWorkbench Component', () => {
     (apiClient.runBenchmark as any).mockResolvedValue(mockRuns);
   });
 
-  it('renders benchmark workbench title, phase badge, and integrity banner', async () => {
+  it('renders benchmark workbench title, status badge, and integrity banner', async () => {
     render(<BenchmarkWorkbench />);
 
     await waitFor(() => {
       expect(screen.getByText('Reproducible Validation & Benchmarking')).toBeInTheDocument();
-      expect(screen.getByText('Phase 07 Operational')).toBeInTheDocument();
+      expect(screen.getByText('Benchmark Suite Active')).toBeInTheDocument();
       expect(screen.getByText('Truthfulness & Methodological Integrity Standards')).toBeInTheDocument();
     });
   });

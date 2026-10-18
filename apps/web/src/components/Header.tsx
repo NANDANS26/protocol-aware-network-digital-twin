@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
               Protocol Digital Twin
             </h1>
             <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300 border border-blue-700/50 font-mono">
-              Phase 00 Foundation
+              v{health?.version || '1.0.0'} Active
             </span>
           </div>
           <p className="text-xs text-gray-400">

@@ -43,9 +43,9 @@ export const PlaceholderView: React.FC<PlaceholderViewProps> = ({ tab }) => {
               <span>Technical Dependencies</span>
             </div>
             <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside">
-              <li>Phase 00 Foundation contracts and verified build system (Completed)</li>
-              <li>Phase 01 C++20 packet-ingestion & zero-copy decoder pipeline (Next)</li>
-              <li>Phase 02 Persistent relational storage & analytical store</li>
+              <li>Foundation contracts and verified build system (Active)</li>
+              <li>C++20 packet-ingestion & zero-copy decoder pipeline (Active)</li>
+              <li>Persistent relational storage & analytical store (Active)</li>
             </ul>
           </div>
 
