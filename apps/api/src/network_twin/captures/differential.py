@@ -68,18 +68,22 @@ class DifferentialValidator:
         self.binary_path = self._resolve_engine_binary()
 
     def _resolve_engine_binary(self) -> Path:
-        """Finds compiled protocol_engine executable."""
+        """Finds compiled protocol_engine executable across Windows and Linux platforms."""
         project_root = Path(__file__).resolve().parents[5]
         candidates = [
             project_root / "build" / "engine" / "Release" / "protocol_engine.exe",
             project_root / "build" / "engine" / "protocol_engine.exe",
+            project_root / "build" / "engine" / "Release" / "protocol_engine",
+            project_root / "build" / "engine" / "protocol_engine",
             Path("build/engine/Release/protocol_engine.exe").resolve(),
             Path("build/engine/protocol_engine.exe").resolve(),
+            Path("build/engine/Release/protocol_engine").resolve(),
+            Path("build/engine/protocol_engine").resolve(),
         ]
         for c in candidates:
             if c.is_file():
                 return c.resolve()
-        raise FileNotFoundError("Could not find compiled protocol_engine.exe. Run cmake --build first.")
+        raise FileNotFoundError("Could not find compiled protocol_engine binary. Run cmake --build first.")
 
     def run_engine_on_file(
         self, pcap_path: Path, output_dir: Path
