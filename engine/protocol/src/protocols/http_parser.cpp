@@ -1,6 +1,7 @@
 #include "engine/protocols/http_parser.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <sstream>
 
 namespace engine::protocols {
@@ -82,7 +83,7 @@ bool HttpParser::parse(
         try {
             out_msg.status_code = static_cast<uint16_t>(std::stoul(code_str));
         } catch (...) {
-            out_msg.status_code = 0;
+            out_msg.status_code = static_cast<uint16_t>(0);
         }
         out_msg.reason_phrase = trim(reason);
     } else {
