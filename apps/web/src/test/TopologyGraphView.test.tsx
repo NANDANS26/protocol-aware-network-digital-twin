@@ -17,7 +17,6 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-sub-corp',
         label: 'Corporate LAN',
         node_type: 'SUBNET',
-        type: 'SUBNET',
         subnet_cidr: '10.0.1.0/24',
         evidence_class: 'CONFIGURED',
         metadata: {},
@@ -27,7 +26,6 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-sub-dmz',
         label: 'DMZ Segment',
         node_type: 'SUBNET',
-        type: 'SUBNET',
         subnet_cidr: '172.16.0.0/24',
         evidence_class: 'CONFIGURED',
         metadata: {},
@@ -38,7 +36,6 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-core-router',
         label: 'Core-GW-01',
         node_type: 'ROUTER',
-        type: 'ROUTER',
         ip_addresses: ['10.0.1.1', '172.16.0.1'],
         mac_addresses: ['00:00:5e:00:01:01'],
         evidence_class: 'DIRECTLY_OBSERVED',
@@ -50,10 +47,9 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-workstation-01',
         label: 'Workstation 1',
         node_type: 'ASSET',
-        type: 'ASSET',
         ip_addresses: ['10.0.1.50'],
         mac_addresses: ['aa:bb:cc:dd:ee:01'],
-        hostnames: ['ws-01.corp.local'],
+        properties: { hostnames: ['ws-01.corp.local'] },
         evidence_class: 'DIRECTLY_OBSERVED',
         metadata: {},
       },
@@ -62,10 +58,9 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-workstation-02',
         label: 'Workstation 2',
         node_type: 'ASSET',
-        type: 'ASSET',
         ip_addresses: ['10.0.1.51'],
         mac_addresses: ['aa:bb:cc:dd:ee:02'],
-        hostnames: ['ws-02.corp.local'],
+        properties: { hostnames: ['ws-02.corp.local'] },
         evidence_class: 'DIRECTLY_OBSERVED',
         metadata: {},
       },
@@ -75,10 +70,9 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-web-server',
         label: 'Web Server',
         node_type: 'ASSET',
-        type: 'ASSET',
         ip_addresses: ['172.16.0.10'],
         mac_addresses: ['aa:bb:cc:dd:ee:10'],
-        hostnames: ['web.dmz.local'],
+        properties: { hostnames: ['web.dmz.local'] },
         evidence_class: 'DIRECTLY_OBSERVED',
         metadata: {},
       },
@@ -87,7 +81,6 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-srv-https',
         label: 'HTTPS (443)',
         node_type: 'SERVICE',
-        type: 'SERVICE',
         ip_addresses: ['172.16.0.10'],
         properties: { port: 443, protocol: 'TCP' },
         evidence_class: 'DIRECTLY_OBSERVED',
@@ -99,7 +92,6 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         node_id: 'node-ext-attacker',
         label: '203.0.113.88',
         node_type: 'ASSET',
-        type: 'ASSET',
         ip_addresses: ['203.0.113.88'],
         evidence_class: 'INFERRED',
         metadata: {},
@@ -139,7 +131,7 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         id: 'edge-host-srv',
         source_node_id: 'node-web-server',
         target_node_id: 'node-srv-https',
-        edge_type: 'HOST_SERVICE',
+        edge_type: 'SERVICE_DEPENDENCY',
         evidence_class: 'DIRECTLY_OBSERVED',
         packet_count: 0,
         byte_count: 0,
@@ -149,7 +141,7 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         id: 'edge-rtr-corp',
         source_node_id: 'node-core-router',
         target_node_id: 'node-sub-corp',
-        edge_type: 'ROUTED_TRANSIT',
+        edge_type: 'CONFIGURED_ROUTE',
         evidence_class: 'CONFIGURED',
         packet_count: 120,
         byte_count: 14000,
@@ -158,7 +150,7 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
         id: 'edge-rtr-dmz',
         source_node_id: 'node-core-router',
         target_node_id: 'node-sub-dmz',
-        edge_type: 'ROUTED_TRANSIT',
+        edge_type: 'CONFIGURED_ROUTE',
         evidence_class: 'CONFIGURED',
         packet_count: 350,
         byte_count: 42000,
@@ -226,13 +218,17 @@ describe('Hierarchical Clustered Topology Layout Engine', () => {
     // Check separation between the two subnet boxes
     const box1 = layout.subnetContainers[0];
     const box2 = layout.subnetContainers[1];
-    expect(box2.x).toBeGreaterThanOrEqual(box1.x + box1.width + 30);
+    expect(box1).toBeDefined();
+    expect(box2).toBeDefined();
+    if (box1 && box2) {
+      expect(box2.x).toBeGreaterThanOrEqual(box1.x + box1.width + 30);
 
-    // Check transit tier is placed in a distinct vertical tier
-    if (layout.transitTier) {
-      expect(layout.transitTier.width).toBeGreaterThan(100);
-      // Transit tier sits above the subnet containers
-      expect(layout.transitTier.y + layout.transitTier.height).toBeLessThanOrEqual(box1.y + 20);
+      // Check transit tier is placed in a distinct vertical tier
+      if (layout.transitTier) {
+        expect(layout.transitTier.width).toBeGreaterThan(100);
+        // Transit tier sits above the subnet containers
+        expect(layout.transitTier.y + layout.transitTier.height).toBeLessThanOrEqual(box1.y + 20);
+      }
     }
   });
 
@@ -403,7 +399,7 @@ describe('TopologyGraphView Component', () => {
 
   it('opens and closes the Inspector Details drawer with Return to Full Graph button', () => {
     const onSelectNode = vi.fn();
-    const selected = mockTopology.nodes[1];
+    const selected = mockTopology.nodes[1] ?? null;
 
     const { rerender } = render(
       <TopologyGraphView

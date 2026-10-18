@@ -341,9 +341,7 @@ export function computeHierarchicalLayout(
     if (!parentAssetId) {
       const hostEdge = edges.find(
         (e) =>
-          (e.edge_type === 'SERVICE_DEPENDENCY' ||
-            e.edge_type === 'HOST_SERVICE' ||
-            e.edge_type === 'HOSTS_SERVICE') &&
+          e.edge_type === 'SERVICE_DEPENDENCY' &&
           (e.source_node_id === svcId || e.target_node_id === svcId)
       );
       if (hostEdge) {

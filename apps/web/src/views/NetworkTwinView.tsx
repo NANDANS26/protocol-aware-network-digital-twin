@@ -36,6 +36,7 @@ import { AdversarialHardeningWorkbench } from './twin/AdversarialHardeningWorkbe
 import { RealCaptureWorkbench } from './twin/RealCaptureWorkbench';
 import { InvestigationWorkbench } from './twin/InvestigationWorkbench';
 import { TopologyGraphView } from './twin/topology/TopologyGraphView';
+import { TopologyModal } from './twin/topology/TopologyModal';
 import {
   Server,
   Network,
@@ -60,6 +61,7 @@ import {
   Activity,
   Bug,
   TrendingUp,
+  Maximize2,
 } from 'lucide-react';
 
 export type TwinTab =
@@ -120,6 +122,9 @@ export const NetworkTwinView: React.FC = () => {
   const [targetSnapshotId, setTargetSnapshotId] = useState<string>('');
   const [comparisonDiff, setComparisonDiff] = useState<SnapshotComparisonDiff | null>(null);
   const [comparing, setComparing] = useState<boolean>(false);
+
+  // Full-screen interactive topology modal state
+  const [isTopologyModalOpen, setIsTopologyModalOpen] = useState<boolean>(false);
 
   // Snapshot creation modal
   const [showSnapshotModal, setShowSnapshotModal] = useState<boolean>(false);
@@ -1019,16 +1024,41 @@ export const NetworkTwinView: React.FC = () => {
 
       {/* TAB CONTENT: TOPOLOGY GRAPH */}
       {activeTab === 'topology' && (
-        <TopologyGraphView
-          topology={topology}
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          onSelectNode={setSelectedNode}
-          onSelectEdge={setSelectedEdge}
-          evidenceClassFilter={evidenceClassFilter}
-          onChangeEvidenceFilter={setEvidenceClassFilter}
-          renderEvidenceClassBadge={renderEvidenceClassBadge}
-        />
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/40 via-surface/60 to-purple-950/30 border border-indigo-900/40">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-white">Full-Screen Interactive Topology Workspace</h3>
+                <p className="text-xs text-gray-400">
+                  Expand the topology model into an immersive modal workspace with dedicated zoom, pan, search, collision-free cluster layout, and collapsible node inspection.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsTopologyModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-900/30 transition shrink-0"
+            >
+              <Maximize2 className="w-4 h-4" />
+              <span>Open Interactive Topology</span>
+            </button>
+          </div>
+
+          <TopologyGraphView
+            topology={topology}
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            onSelectNode={setSelectedNode}
+            onSelectEdge={setSelectedEdge}
+            evidenceClassFilter={evidenceClassFilter}
+            onChangeEvidenceFilter={setEvidenceClassFilter}
+            renderEvidenceClassBadge={renderEvidenceClassBadge}
+            onOpenModal={() => setIsTopologyModalOpen(true)}
+          />
+        </div>
       )}
 
       {/* TAB CONTENT: EVIDENCE INSPECTOR */}
@@ -1560,6 +1590,20 @@ export const NetworkTwinView: React.FC = () => {
       {activeTab === 'investigations' && (
         <InvestigationWorkbench />
       )}
+
+      {/* Full-Screen Interactive Topology Workspace Modal */}
+      <TopologyModal
+        isOpen={isTopologyModalOpen}
+        onClose={() => setIsTopologyModalOpen(false)}
+        topology={topology}
+        selectedNode={selectedNode}
+        selectedEdge={selectedEdge}
+        onSelectNode={setSelectedNode}
+        onSelectEdge={setSelectedEdge}
+        evidenceClassFilter={evidenceClassFilter}
+        onChangeEvidenceFilter={setEvidenceClassFilter}
+        renderEvidenceClassBadge={renderEvidenceClassBadge}
+      />
 
       {/* Snapshot Creation Modal */}
       {showSnapshotModal && (

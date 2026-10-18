@@ -3,6 +3,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  RotateCcw,
   Search,
   X,
   Layers,
@@ -18,7 +19,7 @@ import {
   type TopologyLayoutResult,
 } from './layoutEngine';
 
-interface TopologyGraphViewProps {
+export interface TopologyGraphViewProps {
   topology: TopologyGraph | null;
   selectedNode: TopologyNode | null;
   selectedEdge: TopologyEdge | null;
@@ -26,7 +27,9 @@ interface TopologyGraphViewProps {
   onSelectEdge: (edge: TopologyEdge | null) => void;
   evidenceClassFilter: string;
   onChangeEvidenceFilter: (filter: string) => void;
-  renderEvidenceClassBadge: (evClass?: EvidenceClass | string) => React.ReactNode;
+  renderEvidenceClassBadge?: (evClass?: EvidenceClass | string) => React.ReactNode;
+  isModal?: boolean;
+  onOpenModal?: () => void;
 }
 
 export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
@@ -38,6 +41,8 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
   evidenceClassFilter,
   onChangeEvidenceFilter,
   renderEvidenceClassBadge,
+  isModal = false,
+  onOpenModal,
 }) => {
   // Canvas viewport & transform state
   const containerRef = useRef<HTMLDivElement>(null);
@@ -50,9 +55,17 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>('ALL');
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState<boolean>(true);
 
   // Subnet collapse state
   const [collapsedSubnets, setCollapsedSubnets] = useState<Set<string>>(new Set());
+
+  // Automatically open inspector when user selects a node or edge
+  useEffect(() => {
+    if (selectedNode || selectedEdge) {
+      setInspectorOpen(true);
+    }
+  }, [selectedNode, selectedEdge]);
 
   const renderBadge = (evClass?: string) => {
     if (renderEvidenceClassBadge) {
@@ -227,14 +240,25 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
     return matches;
   }, [searchQuery, topology]);
 
+  const handleResetAll = () => {
+    setSearchQuery('');
+    setNodeTypeFilter('ALL');
+    onChangeEvidenceFilter('ALL');
+    setCollapsedSubnets(new Set());
+    handleResetZoom();
+  };
+
   return (
-    <div className="space-y-4" data-testid="topology-graph-container">
-      {/* Top Toolbar: Search, Filters, Viewport Controls, Legend */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-surface/60 p-3 rounded-lg border border-gray-800 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search box */}
+    <div
+      className={`space-y-3 ${isModal ? 'h-full flex flex-col min-h-0' : ''}`}
+      data-testid="topology-graph-container"
+    >
+      {/* Top Toolbar: Search, Filters, Viewport Controls, Actions, Legend */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-surface/60 p-2.5 sm:p-3 rounded-lg border border-gray-800 shadow-sm shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Search box with Clear button */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-500" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-500 pointer-events-none" />
             <input
               type="text"
               placeholder="Search IP, Host, MAC, ID..."
@@ -244,8 +268,11 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-2 text-gray-500 hover:text-gray-300"
+                aria-label="Clear search"
+                title="Clear search"
+                className="absolute right-2 top-2 text-gray-400 hover:text-white transition"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -284,7 +311,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
           </div>
 
           {/* Subnet Expand/Collapse All */}
-          <div className="flex items-center gap-1 border-l border-gray-800 pl-3">
+          <div className="flex items-center gap-1 border-l border-gray-800 pl-2 sm:pl-3">
             <button
               onClick={expandAll}
               title="Expand All Subnets"
@@ -301,7 +328,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
             </button>
           </div>
 
-          {/* Canvas Zoom Controls */}
+          {/* Canvas Zoom & View Controls */}
           <div className="flex items-center gap-1 bg-slate-950/80 border border-gray-800 rounded px-1.5 py-0.5">
             <button
               type="button"
@@ -336,10 +363,49 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
               {(zoomLevel * 100).toFixed(0)}%
             </button>
           </div>
+
+          {/* Reset All Filters & Viewport */}
+          <button
+            type="button"
+            onClick={handleResetAll}
+            title="Reset All Filters, Search, and Viewport"
+            className="px-2 py-1 bg-surface-raised hover:bg-gray-800 rounded text-[11px] font-mono text-gray-300 hover:text-white border border-gray-800 transition flex items-center gap-1"
+          >
+            <RotateCcw className="w-3 h-3 text-gray-400" />
+            <span>Reset All</span>
+          </button>
+
+          {/* Details Inspector Toggle */}
+          <button
+            type="button"
+            onClick={() => setInspectorOpen((prev) => !prev)}
+            title={inspectorOpen ? 'Hide Details Inspector' : 'Show Details Inspector'}
+            className={`px-2 py-1 rounded text-[11px] font-mono border transition flex items-center gap-1.5 ${
+              inspectorOpen
+                ? 'bg-indigo-950/70 border-indigo-700/60 text-indigo-300'
+                : 'bg-surface-raised border-gray-800 text-gray-400 hover:text-white'
+            }`}
+          >
+            <Layers className="w-3 h-3" />
+            <span className="hidden sm:inline">{inspectorOpen ? 'Hide Details' : 'Show Details'}</span>
+          </button>
+
+          {/* In-Page Open Modal Action */}
+          {!isModal && onOpenModal && (
+            <button
+              type="button"
+              onClick={onOpenModal}
+              title="Open Interactive Full-Screen Topology Workspace"
+              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1.5 shadow-sm transition active:scale-95"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>Open Interactive Topology</span>
+            </button>
+          )}
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="flex items-center gap-3 sm:gap-4 text-xs font-mono">
           <span className="flex items-center gap-1.5 text-blue-400">
             <span className="w-2.5 h-2.5 rounded bg-blue-600 border border-blue-400 inline-block" /> Subnet Hub
           </span>
@@ -356,11 +422,19 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
       </div>
 
       {/* Main Grid: SVG Canvas + Inspector Drawer */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div
+        className={`grid grid-cols-1 ${
+          inspectorOpen ? 'lg:grid-cols-4' : 'grid-cols-1'
+        } gap-4 ${isModal ? 'flex-1 min-h-0 h-full' : ''}`}
+      >
         {/* SVG Graph Canvas Container */}
         <div
           ref={containerRef}
-          className={`lg:col-span-3 bg-slate-950 border border-gray-800 rounded-lg relative min-h-[560px] h-[640px] flex items-center justify-center overflow-hidden shadow-inner ${
+          className={`${
+            inspectorOpen ? 'lg:col-span-3' : 'col-span-full'
+          } bg-slate-950 border border-gray-800 rounded-lg relative ${
+            isModal ? 'h-full min-h-[460px]' : 'min-h-[560px] h-[640px]'
+          } flex items-center justify-center overflow-hidden shadow-inner transition-all duration-150 ${
             isPanning ? 'cursor-grabbing' : 'cursor-grab'
           }`}
         >
