@@ -163,7 +163,11 @@ def _case_lpm_preference() -> AdversarialTestResult:
 
     # Hand-verified oracle: Destination 10.1.2.45 matches 0.0.0.0/0, 10.0.0.0/8, 10.1.0.0/16, and 10.1.2.0/24.
     # Longest prefix is /24, which egresses via eth2.
-    passed = reach.status == ReachabilityStatus.REACHABLE and len(reach.path) > 0 and reach.path[0].egress_interface == "eth2"
+    passed = (
+        reach.status == ReachabilityStatus.REACHABLE
+        and len(reach.path) > 0
+        and reach.path[0].egress_interface == "eth2"
+    )
     return AdversarialTestResult(
         test_id="ADV-ROUTE-01",
         name="Longest Prefix Match (LPM) Strict Preference",
@@ -250,7 +254,11 @@ def _case_metric_tie_breaking() -> AdversarialTestResult:
     reach = engine.evaluate_reachability(model, query)
     elapsed = (time.perf_counter() - t0) * 1000
 
-    passed = reach.status == ReachabilityStatus.REACHABLE and len(reach.path) > 0 and reach.path[0].egress_interface == "eth-low"
+    passed = (
+        reach.status == ReachabilityStatus.REACHABLE
+        and len(reach.path) > 0
+        and reach.path[0].egress_interface == "eth-low"
+    )
     return AdversarialTestResult(
         test_id="ADV-ROUTE-02",
         name="Lowest Metric Tie-Breaking on Equal Prefixes",
@@ -609,12 +617,10 @@ def _case_scenario_deep_clone_integrity() -> AdversarialTestResult:
     # 1. Baseline model must remain completely untouched: same fingerprint, same route count.
     # 2. Counterfactual model must have 1 less route and 1 more firewall rule.
     baseline_untouched = (
-        model.fingerprint == original_fp
-        and len(model.nodes["r1"].routing_table) == original_routes_count
+        model.fingerprint == original_fp and len(model.nodes["r1"].routing_table) == original_routes_count
     )
     cf_mutated = (
-        len(cf_model.nodes["r1"].routing_table) == original_routes_count - 1
-        and len(cf_model.nodes["r1"].acls) > 0
+        len(cf_model.nodes["r1"].routing_table) == original_routes_count - 1 and len(cf_model.nodes["r1"].acls) > 0
     )
     passed = baseline_untouched and cf_mutated
     return AdversarialTestResult(
@@ -666,10 +672,7 @@ def _case_predictive_validation_hardening() -> AdversarialTestResult:
             threw_insufficient = True
 
     # Test 2: Expect ValueError for invalid test_ratio
-    valid_samples = [
-        {"active_flows": float(i), "byte_rate": float(i * 100), "target": float(i + 1)}
-        for i in range(10)
-    ]
+    valid_samples = [{"active_flows": float(i), "byte_rate": float(i * 100), "target": float(i + 1)} for i in range(10)]
     valid_manifest = DatasetManifest(
         dataset_id="test-ds-ratio",
         name="Valid Sample Dataset",

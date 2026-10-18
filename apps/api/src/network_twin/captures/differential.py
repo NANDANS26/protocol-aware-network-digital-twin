@@ -132,7 +132,9 @@ class DifferentialValidator:
 
         # Calculate throughput
         total_packets = summary_data.get("total_packets") or summary_data.get("total_packets_processed") or len(events)
-        total_bytes = summary_data.get("total_bytes") or summary_data.get("total_bytes_processed") or pcap_path.stat().st_size
+        total_bytes = (
+            summary_data.get("total_bytes") or summary_data.get("total_bytes_processed") or pcap_path.stat().st_size
+        )
         pps = (total_packets / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0
         mbps = ((total_bytes * 8) / (elapsed_ms / 1000.0) / 1_000_000.0) if elapsed_ms > 0 else 0.0
 
@@ -271,11 +273,21 @@ class DifferentialValidator:
 
         # Assert identical packet counts
         pkts_pcap = pcap_summary.get("total_packets") or pcap_summary.get("total_packets_processed") or len(pcap_events)
-        pkts_pcapng = pcapng_summary.get("total_packets") or pcapng_summary.get("total_packets_processed") or len(pcapng_events)
+        pkts_pcapng = (
+            pcapng_summary.get("total_packets") or pcapng_summary.get("total_packets_processed") or len(pcapng_events)
+        )
 
         # Assert identical flow counts
-        flows_pcap = pcap_summary.get("total_flows") or pcap_summary.get("total_flows_tracked") or len(pcap_summary.get("flows", []))
-        flows_pcapng = pcapng_summary.get("total_flows") or pcapng_summary.get("total_flows_tracked") or len(pcapng_summary.get("flows", []))
+        flows_pcap = (
+            pcap_summary.get("total_flows")
+            or pcap_summary.get("total_flows_tracked")
+            or len(pcap_summary.get("flows", []))
+        )
+        flows_pcapng = (
+            pcapng_summary.get("total_flows")
+            or pcapng_summary.get("total_flows_tracked")
+            or len(pcapng_summary.get("flows", []))
+        )
 
         # Assert identical protocol distributions
         proto_pcap = pcap_summary.get("protocol_counts", {})

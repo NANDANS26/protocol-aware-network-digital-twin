@@ -104,9 +104,7 @@ class BenchmarkRunner:
                 )
                 decoding_duration_ms = (time.perf_counter() - decoding_start) * 1000.0
                 packets_decoded = job.summary.total_packets if job.summary else 0
-                throughput = (
-                    (packets_decoded / (decoding_duration_ms / 1000.0)) if decoding_duration_ms > 0 else 0.0
-                )
+                throughput = (packets_decoded / (decoding_duration_ms / 1000.0)) if decoding_duration_ms > 0 else 0.0
             except Exception as e:
                 decoding_duration_ms = (time.perf_counter() - decoding_start) * 1000.0
                 decoding_errors.append(str(e))
@@ -131,7 +129,9 @@ class BenchmarkRunner:
         if predictive_metrics:
             predictive_metrics.duration_ms = round((time.perf_counter() - pred_start) * 1000.0, 2)
             if predictive_metrics.comparison_status == BaselineComparisonStatus.INSUFFICIENT_DATA:
-                limitations.append("Sample count insufficient for time-series ML training; baseline comparison skipped.")
+                limitations.append(
+                    "Sample count insufficient for time-series ML training; baseline comparison skipped."
+                )
 
         # --- Stage 4: Scenario Consensus & Ground Truth Supremacy ---
         consensus_metrics = self._evaluate_consensus_stage(deterministic_metrics, predictive_metrics)
@@ -176,9 +176,7 @@ class BenchmarkRunner:
             self.run_fixture(meta.fixture_id, random_seed=random_seed)
         return self.metadata_store.get_benchmark_summary()
 
-    def _evaluate_deterministic_stage(
-        self, fixture_id: str, meta: BenchmarkFixtureMeta
-    ) -> DeterministicStageMetrics:
+    def _evaluate_deterministic_stage(self, fixture_id: str, meta: BenchmarkFixtureMeta) -> DeterministicStageMetrics:
         """Evaluates hand-verifiable forwarding and invariants against independent expectations."""
         if fixture_id == "empty-malformed-edge":
             return DeterministicStageMetrics(

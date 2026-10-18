@@ -12,7 +12,7 @@ from network_twin.benchmarking.models import (
     BenchmarkSummaryResponse,
 )
 from network_twin.config import AppSettings, settings
-from network_twin.investigations.models import InvestigationCase
+from network_twin.investigations.models import InvestigationCase, InvestigationExecutionRecord
 from network_twin.models.intelligence import (
     Asset,
     CommunicationRelationship,
@@ -56,7 +56,7 @@ from network_twin.testing.sequence_models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class MetadataStore:
@@ -105,6 +105,8 @@ class MetadataStore:
                 self._migrate_to_v6(conn)
             if current_version < 7:
                 self._migrate_to_v7(conn)
+            if current_version < 8:
+                self._migrate_to_v8(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -635,6 +637,40 @@ class MetadataStore:
 
             INSERT INTO schema_migrations (version, applied_at, description)
             VALUES (7, datetime('now'), 'Phase 10: Evidence-Backed Network Incident Investigation and Root-Cause Analysis');
+            """
+        )
+        conn.commit()
+
+    def _migrate_to_v8(self, conn: sqlite3.Connection):
+        """Schema v8: Reproducible Investigation Executions and Replay Ledger."""
+        logger.info("Applying Metadata Store Schema Migration v8...")
+
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS investigation_executions (
+                execution_id TEXT PRIMARY KEY,
+                investigation_id TEXT NOT NULL,
+                execution_index INTEGER NOT NULL,
+                investigation_type TEXT NOT NULL,
+                engine_version TEXT NOT NULL,
+                rule_version TEXT NOT NULL,
+                started_at_iso TEXT NOT NULL,
+                completed_at_iso TEXT NOT NULL,
+                execution_duration_ms REAL NOT NULL,
+                status TEXT NOT NULL,
+                replay_of_execution_id TEXT,
+                model_id TEXT,
+                model_fingerprint TEXT,
+                overall_evidence_digest TEXT NOT NULL,
+                sufficiency TEXT NOT NULL,
+                primary_root_cause_id TEXT,
+                execution_record_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_inv_exec_investigation_id ON investigation_executions(investigation_id);
+            CREATE INDEX IF NOT EXISTS idx_inv_exec_replay_of ON investigation_executions(replay_of_execution_id);
+
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (8, datetime('now'), 'Phase 11: Reproducible Investigation Replay, Execution Records, and Integrity Ledger');
             """
         )
         conn.commit()
@@ -1358,7 +1394,9 @@ class MetadataStore:
     def save_network_model(self, model: NetworkModel) -> None:
         with self._get_connection() as conn:
             if model.source_snapshot_id:
-                cur = conn.execute("SELECT 1 FROM topology_snapshots WHERE snapshot_id = ?;", (model.source_snapshot_id,))
+                cur = conn.execute(
+                    "SELECT 1 FROM topology_snapshots WHERE snapshot_id = ?;", (model.source_snapshot_id,)
+                )
                 if not cur.fetchone():
                     conn.execute(
                         """
@@ -2534,11 +2572,15 @@ class MetadataStore:
         unique_fixtures = {r.fixture_id for r in runs}
         avg_throughput = sum(r.decoding.throughput_pkts_per_sec for r in runs) / total_runs
         deterministic_correct = sum(
-            1 for r in runs if r.deterministic.forwarding_matches_expected and r.deterministic.invariant_matches_expected
+            1
+            for r in runs
+            if r.deterministic.forwarding_matches_expected and r.deterministic.invariant_matches_expected
         )
         accuracy_pct = (deterministic_correct / total_runs) * 100.0
 
-        runs_with_predictive = [r for r in runs if r.predictive and r.predictive.comparison_status != "INSUFFICIENT_DATA"]
+        runs_with_predictive = [
+            r for r in runs if r.predictive and r.predictive.comparison_status != "INSUFFICIENT_DATA"
+        ]
         if runs_with_predictive:
             beating = sum(1 for r in runs_with_predictive if r.predictive.comparison_status == "BEATS_BASELINE")
             beating_pct = (beating / len(runs_with_predictive)) * 100.0
@@ -2633,9 +2675,7 @@ class MetadataStore:
 
     def list_investigations(self) -> list[InvestigationCase]:
         with self._get_connection() as conn:
-            cur = conn.execute(
-                "SELECT * FROM investigation_cases ORDER BY created_at_iso DESC;"
-            )
+            cur = conn.execute("SELECT * FROM investigation_cases ORDER BY created_at_iso DESC;")
             rows = cur.fetchall()
             return [
                 InvestigationCase(
@@ -2666,6 +2706,88 @@ class MetadataStore:
             )
             conn.commit()
             return cur.rowcount > 0
+
+    # --- Phase 11: Investigation Execution Records & Replay Ledger ---
+
+    def save_execution(self, record: InvestigationExecutionRecord) -> None:
+        """Persist an immutable investigation execution record."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO investigation_executions (
+                    execution_id, investigation_id, execution_index, investigation_type,
+                    engine_version, rule_version, started_at_iso, completed_at_iso,
+                    execution_duration_ms, status, replay_of_execution_id, model_id,
+                    model_fingerprint, overall_evidence_digest, sufficiency,
+                    primary_root_cause_id, execution_record_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    record.execution_id,
+                    record.investigation_id,
+                    record.execution_index,
+                    record.investigation_type.value
+                    if hasattr(record.investigation_type, "value")
+                    else str(record.investigation_type),
+                    record.engine_version,
+                    record.rule_version,
+                    record.started_at_iso,
+                    record.completed_at_iso,
+                    record.execution_duration_ms,
+                    record.status,
+                    record.replay_of_execution_id,
+                    record.model_id,
+                    record.model_fingerprint,
+                    record.overall_evidence_digest,
+                    record.sufficiency.value if hasattr(record.sufficiency, "value") else str(record.sufficiency),
+                    record.primary_root_cause_id,
+                    record.model_dump_json(),
+                ),
+            )
+            conn.commit()
+
+    def get_execution(self, execution_id: str) -> InvestigationExecutionRecord | None:
+        """Retrieve an execution record by its unique execution_id."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT execution_record_json FROM investigation_executions WHERE execution_id = ?;",
+                (execution_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return InvestigationExecutionRecord.model_validate_json(row["execution_record_json"])
+
+    def list_executions(self, investigation_id: str) -> list[InvestigationExecutionRecord]:
+        """List all executions for a specific investigation case, newest first."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                """
+                SELECT execution_record_json FROM investigation_executions
+                WHERE investigation_id = ?
+                ORDER BY execution_index DESC, started_at_iso DESC;
+                """,
+                (investigation_id,),
+            )
+            rows = cur.fetchall()
+            return [InvestigationExecutionRecord.model_validate_json(row["execution_record_json"]) for row in rows]
+
+    def get_latest_execution(self, investigation_id: str) -> InvestigationExecutionRecord | None:
+        """Retrieve the most recent execution record for an investigation case."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                """
+                SELECT execution_record_json FROM investigation_executions
+                WHERE investigation_id = ?
+                ORDER BY execution_index DESC, started_at_iso DESC
+                LIMIT 1;
+                """,
+                (investigation_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return InvestigationExecutionRecord.model_validate_json(row["execution_record_json"])
 
 
 metadata_store = MetadataStore()

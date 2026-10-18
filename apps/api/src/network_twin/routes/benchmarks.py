@@ -40,7 +40,9 @@ def execute_benchmark_run(req: BenchmarkRunRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
         logger.error("Benchmark execution error: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Benchmark execution failed: {e}") from e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Benchmark execution failed: {e}"
+        ) from e
 
 
 @router.get("/runs", response_model=list[BenchmarkRunRecord])

@@ -50,14 +50,18 @@ class CaptureManifestItem(BaseModel):
     protocols: list[str] = Field(default_factory=list, description="List of represented protocols")
     scenarios: list[str] = Field(default_factory=list, description="Network scenarios exercised")
     expected_outcomes: CaptureExpectedOutcome = Field(..., description="Independently established expected outcomes")
-    known_limitations: list[str] = Field(default_factory=list, description="Explicitly documented unsupported behavior or scope bounds")
+    known_limitations: list[str] = Field(
+        default_factory=list, description="Explicitly documented unsupported behavior or scope bounds"
+    )
 
 
 class ProcessResourceTelemetry(BaseModel):
     wall_duration_ms: float = Field(..., description="Total wall-clock duration in milliseconds")
     throughput_pps: float = Field(0.0, description="Packets per second throughput")
     throughput_mbps: float = Field(0.0, description="Megabits per second throughput")
-    peak_native_memory_bytes: int = Field(0, description="Peak native process WorkingSet / RSS memory measured separately")
+    peak_native_memory_bytes: int = Field(
+        0, description="Peak native process WorkingSet / RSS memory measured separately"
+    )
     python_heap_bytes: int = Field(0, description="Python runtime heap allocation measured via tracemalloc")
 
 
@@ -79,7 +83,9 @@ class CaptureValidationReport(BaseModel):
     protocol_distribution: dict[str, int] = Field(default_factory=dict, description="Counts of decoded protocols")
     parser_status_counts: dict[str, int] = Field(default_factory=dict, description="Counts of parser statuses")
     telemetry: ProcessResourceTelemetry = Field(..., description="Resource consumption telemetry")
-    field_differences: list[FieldComparisonDifference] = Field(default_factory=list, description="Discrepancies against reference decoder")
+    field_differences: list[FieldComparisonDifference] = Field(
+        default_factory=list, description="Discrepancies against reference decoder"
+    )
     explanation: str = Field(..., description="Summary explanation of validation verdict")
 
 

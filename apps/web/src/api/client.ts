@@ -705,6 +705,64 @@ export class NetworkTwinApiClient {
       method: 'DELETE',
     });
   }
+
+  // --- Phase 11: Reproducible Replay & Evidence Integrity ---
+
+  async listInvestigationExecutions(
+    investigationId: string
+  ): Promise<import('../types/investigations').InvestigationExecutionRecord[]> {
+    return this.request<import('../types/investigations').InvestigationExecutionRecord[]>(
+      `/twin/investigations/${investigationId}/executions`
+    );
+  }
+
+  async getInvestigationExecution(
+    investigationId: string,
+    executionId: string
+  ): Promise<import('../types/investigations').InvestigationExecutionRecord> {
+    return this.request<import('../types/investigations').InvestigationExecutionRecord>(
+      `/twin/investigations/${investigationId}/executions/${executionId}`
+    );
+  }
+
+  async verifyExecutionIntegrity(
+    investigationId: string,
+    executionId: string
+  ): Promise<import('../types/investigations').ExecutionIntegrityReport> {
+    return this.request<import('../types/investigations').ExecutionIntegrityReport>(
+      `/twin/investigations/${investigationId}/executions/${executionId}/verify-integrity`,
+      { method: 'POST' }
+    );
+  }
+
+  async replayInvestigationExecution(
+    investigationId: string,
+    executionId: string
+  ): Promise<import('../types/investigations').ReplayExecutionResponse> {
+    return this.request<import('../types/investigations').ReplayExecutionResponse>(
+      `/twin/investigations/${investigationId}/executions/${executionId}/replay`,
+      { method: 'POST' }
+    );
+  }
+
+  async compareInvestigationExecutions(
+    investigationId: string,
+    executionId: string,
+    otherExecutionId: string
+  ): Promise<import('../types/investigations').ReplayComparison> {
+    return this.request<import('../types/investigations').ReplayComparison>(
+      `/twin/investigations/${investigationId}/executions/${executionId}/compare/${otherExecutionId}`
+    );
+  }
+
+  async exportExecutionAuditPack(
+    investigationId: string,
+    executionId: string
+  ): Promise<import('../types/investigations').AuditPackExport> {
+    return this.request<import('../types/investigations').AuditPackExport>(
+      `/twin/investigations/${investigationId}/executions/${executionId}/audit-pack`
+    );
+  }
 }
 
 export const apiClient = new NetworkTwinApiClient();

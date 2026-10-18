@@ -1,12 +1,12 @@
 # Implementation Status: Protocol Digital Twin & Security Verification Engine
 
-## Phase 08 Status Classification: Fully Operational
+## Phase 11 Status Classification: Fully Operational
 
 This document explicitly separates **Completed**, **Partial / Transitional**, **Planned**, and **Blocked** work across all platform subsystems.
 
 ---
 
-### 1. Completed Work (Phase 00 through Phase 08)
+### 1. Completed Work (Phase 00 through Phase 11)
 
 | Subsystem / Area | Component | Verification Evidence |
 | :--- | :--- | :--- |
@@ -64,8 +64,14 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 | **5 Deterministic Investigation Workflows** | Automated workflows covering Connectivity Failure (LPM, DOWN interface, ACL drop), Unexpected Policy Decision (firewall permit/deny with rule shadowing detection), DNS/Service-Resolution (NXDOMAIN, timeout, unmodeled), Unexpected Traffic Relationship (disclaiming ungrounded physical link assertions), and Change-Related Behavior (snapshot diff correlation). | Fully verified across all 5 incident workflows. |
 | **Isolated Counterfactual Remediation Engine** | Deep-clones digital twin models in isolation, applies hypothetical remedial mutations (`SET_INTERFACE_STATE`, `ADD_FIREWALL_RULE`, `ADD_ROUTE`), re-evaluates forward simulation, and verifies `REMEDIAL_ACTION_CONFIRMED` outcomes side-by-side. | Tested in `test_investigate_counterfactual_remediation`. |
 | **Incident Investigation REST API** | 7 endpoints under `/api/v1/twin/investigations`: `POST /`, `GET /`, `GET /{id}`, `POST /{id}/execute`, `POST /{id}/counterfactual`, `GET /{id}/export`, and `DELETE /{id}`. | Tested in `test_investigation_rest_api_endpoints`. |
-| **React Incident Investigation Workbench** | Dedicated interactive workbench tab (`InvestigationWorkbench.tsx`) featuring case creation modal, epistemological badges, ranked root cause cards, evidence timeline/graph visualizer, side-by-side counterfactual comparisons, bounded limitations, and reproducible evidence instructions. | 4 passed Vitest unit tests in `InvestigationWorkbench.test.tsx`. |
-| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 26/26 tests, 183 assertions), pytest (166 tests), and vitest (44 tests). |
+| **React Incident Investigation Workbench** | Dedicated interactive workbench tab (`InvestigationWorkbench.tsx`) featuring case creation modal, epistemological badges, ranked root cause cards, evidence timeline/graph visualizer, side-by-side counterfactual comparisons, bounded limitations, and reproducible evidence instructions. | 6 passed Vitest unit tests in `InvestigationWorkbench.test.tsx`. |
+| **Cryptographic Evidence Hashing & Verification** | Deterministic canonical serialization (RFC 8785 sorting and IEEE-754 precision) and SHA-256 fingerprinting of individual evidence items and complete evidence graphs. Features mandatory epistemological disclaimer separating integrity from ground-truth authenticity. | 10 passed tests in `test_investigation_replay.py`. |
+| **Immutable Execution Records & Lineage (Schema v8)** | Complete separation between editable cases and immutable execution snapshots in SQLite (`investigation_executions`). Tracks execution index, software/model version, referenced captures/snapshots, and execution lineage (`replay_of_execution_id`). | Verified in schema migration tests and persistence unit tests. |
+| **Deterministic Replay Engine & Finding Comparison** | Isolated re-execution of investigations with strict pre-flight dependency validation (`REPLAY_NOT_POSSIBLE` if inputs missing), returning bounded replay statuses (`REPLAY_IDENTICAL`, `REPLAY_DIFFERENT`, `REPLAY_INCOMPLETE`) and structural finding diffs. | Verified in `test_investigation_replay.py`. |
+| **Verifiable Audit Pack Export** | Self-contained, portable JSON export containing execution metadata, canonical evidence graph, integrity report, ranked findings, and step-by-step external audit reproduction instructions. | Verified in `test_export_audit_pack`. |
+| **Investigation Replay REST API** | 6 endpoints under `/api/v1/twin/investigations`: `GET /{id}/executions`, `GET /{id}/executions/{exec_id}`, `POST /{id}/executions/{exec_id}/verify-integrity`, `POST /{id}/executions/{exec_id}/replay`, `GET /{id}/executions/{exec_id}/compare/{other_id}`, and `GET /{id}/executions/{exec_id}/audit-pack`. | Verified in `test_investigation_replay_api_endpoints`. |
+| **React Replay Cockpit & Integrity Ledger** | Integrated into `InvestigationWorkbench.tsx`: Execution History & Replay Audit Ledger, inline cryptographic integrity report with disclaimer, Replay Comparison modal, and Audit Pack export viewer. | 6 passed Vitest tests in `InvestigationWorkbench.test.tsx`. |
+| **Quality Gates & CI** | Automated verification gate (`.\scripts\dev.ps1 check-all`), GitHub Actions CI workflow, Makefile task runner. | Full clean pass across linters (Ruff 0 errors), typecheckers (tsc 0 errors), doctest (C++ 26/26 tests, 183 assertions), pytest (176 tests), and vitest (46 tests). |
 
 ---
 
@@ -76,9 +82,9 @@ This document explicitly separates **Completed**, **Partial / Transitional**, **
 
 ---
 
-### 3. Planned Work (Phase 11)
+### 3. Planned Work (Phase 12)
 
-- **Phase 11**: Autonomous Multi-Twin Federation, Cross-Domain Attestation, Formal SMT Solver Symbolic Reachability, and Dynamic Chaos Injection.
+- **Phase 12**: Autonomous Multi-Twin Federation, Cross-Domain Attestation, Formal SMT Solver Symbolic Reachability, and Dynamic Chaos Injection.
 
 ---
 

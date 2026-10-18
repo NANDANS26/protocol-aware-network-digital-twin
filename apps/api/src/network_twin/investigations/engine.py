@@ -4,12 +4,20 @@ Deterministic Incident Investigation & Root-Cause Analysis Engine for Phase 10.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from network_twin.investigations.integrity import (
+    compare_executions,
+    compute_evidence_graph_hashes,
+    verify_execution_integrity,
+)
 from network_twin.investigations.models import (
+    AuditPackExport,
     CandidateExplanation,
     CandidateStatus,
     CounterfactualComparison,
@@ -20,8 +28,11 @@ from network_twin.investigations.models import (
     EvidenceNodeType,
     EvidenceRelationship,
     EvidenceSufficiency,
+    ExecutionIntegrityReport,
     InvestigationCase,
+    InvestigationExecutionRecord,
     InvestigationType,
+    ReplayComparison,
 )
 from network_twin.simulation.forwarding_engine import ForwardingEngine
 from network_twin.simulation.models import (
@@ -90,12 +101,8 @@ class InvestigationEngine:
         self.metadata_store.save_investigation(case)
         return case
 
-    def execute_investigation(self, investigation_id: str) -> InvestigationCase:
-        """Executes the specific investigation workflow, gathers evidence, and ranks candidate causes."""
-        case = self.metadata_store.get_investigation(investigation_id)
-        if not case:
-            raise KeyError(f"Investigation '{investigation_id}' not found.")
-
+    def _run_workflow(self, case: InvestigationCase) -> None:
+        """Dispatches an investigation case to its corresponding deterministic workflow."""
         if case.investigation_type == InvestigationType.CONNECTIVITY_FAILURE:
             self._investigate_connectivity_failure(case)
         elif case.investigation_type == InvestigationType.UNEXPECTED_POLICY_DECISION:
@@ -107,10 +114,276 @@ class InvestigationEngine:
         elif case.investigation_type == InvestigationType.CONFIGURATION_CHANGE_CORRELATION:
             self._investigate_change_correlation(case)
 
+    def execute_investigation(self, investigation_id: str) -> InvestigationCase:
+        """Executes the specific investigation workflow, gathers evidence, creates an immutable execution record, and persists both."""
+        case = self.metadata_store.get_investigation(investigation_id)
+        if not case:
+            raise KeyError(f"Investigation '{investigation_id}' not found.")
+
+        start_time = datetime.now(UTC)
+        start_perf = time.perf_counter()
+
+        self._run_workflow(case)
+
+        duration_ms = (time.perf_counter() - start_perf) * 1000.0
+
         case.status = "ANALYZED"
         case.updated_at_iso = datetime.now(UTC).isoformat()
         self.metadata_store.save_investigation(case)
+
+        # Compute evidence integrity hashes and overall cryptographic digest
+        item_hashes, overall_digest = compute_evidence_graph_hashes(case.evidence_graph.nodes)
+
+        # Extract referenced captures and snapshots
+        referenced_captures: list[str] = list(case.scope.capture_ids)
+        for node in case.evidence_graph.nodes:
+            if node.node_type == EvidenceNodeType.CAPTURE and node.source_id not in referenced_captures:
+                referenced_captures.append(node.source_id)
+
+        referenced_snapshots: list[str] = list(case.scope.snapshot_ids)
+
+        # Model fingerprinting
+        model_id = case.scope.model_id
+        model_fp: str | None = None
+        if model_id:
+            m = self.metadata_store.get_network_model(model_id)
+            if m:
+                model_fp = m.fingerprint or hashlib.sha256(m.name.encode()).hexdigest()
+
+        existing_execs = self.metadata_store.list_executions(investigation_id)
+        exec_idx = len(existing_execs) + 1
+        exec_id = f"exec-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
+
+        record = InvestigationExecutionRecord(
+            execution_id=exec_id,
+            investigation_id=case.investigation_id,
+            execution_index=exec_idx,
+            investigation_type=case.investigation_type,
+            engine_version="11.0.0",
+            rule_version="2026.10",
+            started_at_iso=start_time.isoformat(),
+            completed_at_iso=datetime.now(UTC).isoformat(),
+            execution_duration_ms=round(duration_ms, 2),
+            status="SUCCESS",
+            replay_of_execution_id=None,
+            normalized_scope=case.scope,
+            model_id=model_id,
+            model_fingerprint=model_fp,
+            referenced_capture_ids=referenced_captures,
+            referenced_snapshot_ids=referenced_snapshots,
+            evidence_graph=case.evidence_graph,
+            evidence_integrity_hashes=item_hashes,
+            overall_evidence_digest=overall_digest,
+            candidate_explanations=case.candidate_explanations,
+            primary_root_cause_id=case.primary_root_cause_id,
+            sufficiency=case.sufficiency,
+            counterfactual_comparisons=case.counterfactual_comparisons,
+            unresolved_questions=case.unresolved_questions,
+            known_limitations=case.explicit_limitations,
+            reproduction_steps=case.reproduction_steps,
+            execution_notes="Primary investigation execution run.",
+        )
+        self.metadata_store.save_execution(record)
+
         return case
+
+    def replay_execution(
+        self,
+        investigation_id: str,
+        execution_id: str,
+    ) -> tuple[InvestigationExecutionRecord, ReplayComparison]:
+        """
+        Replays a historical investigation execution using recorded inputs and model state.
+        Preserves original execution records without modification.
+        """
+        orig_exec = self.metadata_store.get_execution(execution_id)
+        if not orig_exec:
+            raise KeyError(f"Execution record '{execution_id}' not found.")
+
+        # Check capture dependencies
+        for cap_id in orig_exec.referenced_capture_ids:
+            if not self.metadata_store.get_capture(cap_id):
+                now_iso = datetime.now(UTC).isoformat()
+                not_possible_exec = InvestigationExecutionRecord(
+                    execution_id=f"exec-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}",
+                    investigation_id=investigation_id,
+                    execution_index=len(self.metadata_store.list_executions(investigation_id)) + 1,
+                    investigation_type=orig_exec.investigation_type,
+                    engine_version="11.0.0",
+                    rule_version="2026.10",
+                    started_at_iso=now_iso,
+                    completed_at_iso=now_iso,
+                    execution_duration_ms=0.0,
+                    status="NOT_POSSIBLE",
+                    replay_of_execution_id=orig_exec.execution_id,
+                    normalized_scope=orig_exec.normalized_scope,
+                    model_id=orig_exec.model_id,
+                    model_fingerprint=orig_exec.model_fingerprint,
+                    referenced_capture_ids=orig_exec.referenced_capture_ids,
+                    referenced_snapshot_ids=orig_exec.referenced_snapshot_ids,
+                    evidence_graph=EvidenceGraph(),
+                    evidence_integrity_hashes={},
+                    overall_evidence_digest=hashlib.sha256(b"NOT_POSSIBLE").hexdigest(),
+                    candidate_explanations=[],
+                    primary_root_cause_id=None,
+                    sufficiency=EvidenceSufficiency.INSUFFICIENT,
+                    counterfactual_comparisons=[],
+                    unresolved_questions=[f"Capture input '{cap_id}' is no longer present in storage."],
+                    known_limitations=[
+                        f"Cannot replay execution '{execution_id}' because capture '{cap_id}' is missing."
+                    ],
+                    reproduction_steps=[],
+                    execution_notes=f"Missing referenced capture '{cap_id}'. Replay refused.",
+                )
+                self.metadata_store.save_execution(not_possible_exec)
+                cmp = compare_executions(orig_exec, not_possible_exec)
+                return not_possible_exec, cmp
+
+        # Check model dependency if model_id was recorded
+        if orig_exec.model_id:
+            m = self.metadata_store.get_network_model(orig_exec.model_id)
+            if not m:
+                now_iso = datetime.now(UTC).isoformat()
+                not_possible_exec = InvestigationExecutionRecord(
+                    execution_id=f"exec-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}",
+                    investigation_id=investigation_id,
+                    execution_index=len(self.metadata_store.list_executions(investigation_id)) + 1,
+                    investigation_type=orig_exec.investigation_type,
+                    engine_version="11.0.0",
+                    rule_version="2026.10",
+                    started_at_iso=now_iso,
+                    completed_at_iso=now_iso,
+                    execution_duration_ms=0.0,
+                    status="NOT_POSSIBLE",
+                    replay_of_execution_id=orig_exec.execution_id,
+                    normalized_scope=orig_exec.normalized_scope,
+                    model_id=orig_exec.model_id,
+                    model_fingerprint=orig_exec.model_fingerprint,
+                    referenced_capture_ids=orig_exec.referenced_capture_ids,
+                    referenced_snapshot_ids=orig_exec.referenced_snapshot_ids,
+                    evidence_graph=EvidenceGraph(),
+                    evidence_integrity_hashes={},
+                    overall_evidence_digest=hashlib.sha256(b"NOT_POSSIBLE").hexdigest(),
+                    candidate_explanations=[],
+                    primary_root_cause_id=None,
+                    sufficiency=EvidenceSufficiency.INSUFFICIENT,
+                    counterfactual_comparisons=[],
+                    unresolved_questions=[f"Network model '{orig_exec.model_id}' is no longer present in storage."],
+                    known_limitations=[
+                        f"Cannot replay execution '{execution_id}' because model '{orig_exec.model_id}' is missing."
+                    ],
+                    reproduction_steps=[],
+                    execution_notes=f"Historical model '{orig_exec.model_id}' is absent from metadata catalog.",
+                )
+                self.metadata_store.save_execution(not_possible_exec)
+                cmp = compare_executions(orig_exec, not_possible_exec)
+                return not_possible_exec, cmp
+
+        # Construct isolated replay case
+        replay_case = InvestigationCase(
+            investigation_id=f"replay-{orig_exec.execution_id}",
+            title=f"Replay of {orig_exec.execution_id}",
+            investigation_type=orig_exec.investigation_type,
+            scope=orig_exec.normalized_scope.model_copy(deep=True),
+            status="OPEN",
+            sufficiency=EvidenceSufficiency.INSUFFICIENT,
+            created_at_iso=datetime.now(UTC).isoformat(),
+            updated_at_iso=datetime.now(UTC).isoformat(),
+            evidence_graph=EvidenceGraph(),
+            candidate_explanations=[],
+            primary_root_cause_id=None,
+            counterfactual_comparisons=[],
+            unresolved_questions=[],
+            explicit_limitations=[],
+            reproduction_steps=[],
+        )
+
+        start_time = datetime.now(UTC)
+        start_perf = time.perf_counter()
+
+        self._run_workflow(replay_case)
+
+        duration_ms = (time.perf_counter() - start_perf) * 1000.0
+
+        item_hashes, overall_digest = compute_evidence_graph_hashes(replay_case.evidence_graph.nodes)
+
+        # Check current model fingerprint
+        current_model_fp = orig_exec.model_fingerprint
+        if orig_exec.model_id:
+            m = self.metadata_store.get_network_model(orig_exec.model_id)
+            if m:
+                current_model_fp = m.fingerprint or hashlib.sha256(m.name.encode()).hexdigest()
+
+        replayed_record = InvestigationExecutionRecord(
+            execution_id=f"exec-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}",
+            investigation_id=investigation_id,
+            execution_index=len(self.metadata_store.list_executions(investigation_id)) + 1,
+            investigation_type=orig_exec.investigation_type,
+            engine_version="11.0.0",
+            rule_version="2026.10",
+            started_at_iso=start_time.isoformat(),
+            completed_at_iso=datetime.now(UTC).isoformat(),
+            execution_duration_ms=round(duration_ms, 2),
+            status="SUCCESS",
+            replay_of_execution_id=orig_exec.execution_id,
+            normalized_scope=orig_exec.normalized_scope,
+            model_id=orig_exec.model_id,
+            model_fingerprint=current_model_fp,
+            referenced_capture_ids=orig_exec.referenced_capture_ids,
+            referenced_snapshot_ids=orig_exec.referenced_snapshot_ids,
+            evidence_graph=replay_case.evidence_graph,
+            evidence_integrity_hashes=item_hashes,
+            overall_evidence_digest=overall_digest,
+            candidate_explanations=replay_case.candidate_explanations,
+            primary_root_cause_id=replay_case.primary_root_cause_id,
+            sufficiency=replay_case.sufficiency,
+            counterfactual_comparisons=replay_case.counterfactual_comparisons,
+            unresolved_questions=replay_case.unresolved_questions,
+            known_limitations=replay_case.explicit_limitations,
+            reproduction_steps=replay_case.reproduction_steps,
+            execution_notes=f"Deterministic replay of execution '{orig_exec.execution_id}'.",
+        )
+
+        self.metadata_store.save_execution(replayed_record)
+        comparison = compare_executions(orig_exec, replayed_record)
+        return replayed_record, comparison
+
+    def verify_execution(self, execution_id: str) -> ExecutionIntegrityReport:
+        """Audits cryptographic evidence digests and source availability for an execution."""
+        record = self.metadata_store.get_execution(execution_id)
+        if not record:
+            raise KeyError(f"Execution record '{execution_id}' not found.")
+        return verify_execution_integrity(record, self.metadata_store)
+
+    def export_audit_pack(self, execution_id: str) -> AuditPackExport:
+        """Generates a self-contained, verifiable audit package with offline reproduction instructions."""
+        record = self.metadata_store.get_execution(execution_id)
+        if not record:
+            raise KeyError(f"Execution record '{execution_id}' not found.")
+        integrity_report = verify_execution_integrity(record, self.metadata_store)
+        instructions = [
+            "1. Canonicalize each evidence item using sorted JSON keys and compact separators (',', ':').",
+            "2. Compute SHA-256 for each evidence item and match against recorded evidence_integrity_hashes.",
+            "3. Form the multi-line string of sorted 'evidence_id:sha256' lines and compute SHA-256 to verify overall_evidence_digest.",
+            "4. Replay using the normalized_scope against the recorded engine_version and rule_version.",
+            "5. Note: Cryptographic integrity verification confirms absence of tampering; it does not attest to external ground truth.",
+        ]
+        return AuditPackExport(
+            audit_pack_id=f"audit-{record.execution_id}",
+            exported_at_iso=datetime.now(UTC).isoformat(),
+            export_schema_version="1.0.0",
+            execution=record,
+            integrity_report=integrity_report,
+            audit_instructions=instructions,
+        )
+
+    def get_execution(self, execution_id: str) -> InvestigationExecutionRecord | None:
+        """Retrieves an execution record by ID."""
+        return self.metadata_store.get_execution(execution_id)
+
+    def list_executions(self, investigation_id: str) -> list[InvestigationExecutionRecord]:
+        """Lists all executions for an investigation, newest first."""
+        return self.metadata_store.list_executions(investigation_id)
 
     # --- Workflow A: Connectivity Failure ---
 
@@ -275,7 +548,9 @@ class InvestigationEngine:
                         score=0.95,
                         rationale=f"Traffic matched access control rule '{rule_id}' on node with action DENY.",
                         supporting_evidence_ids=["ev-acl-block", "ev-sim-forwarding-result"],
-                        strengthening_factors=["Explicit match on source/dest IP and destination port in ordered filter table."],
+                        strengthening_factors=[
+                            "Explicit match on source/dest IP and destination port in ordered filter table."
+                        ],
                         weakening_factors=["Shadowing by an earlier permissive rule."],
                     )
                 )
@@ -292,7 +567,9 @@ class InvestigationEngine:
                         score=0.92,
                         rationale=f"Routing table on evaluator node contains no route entry covering destination IP {dst_ip}.",
                         supporting_evidence_ids=["ev-sim-forwarding-result"],
-                        strengthening_factors=["Complete routing table inspected without matching default or subnet route."],
+                        strengthening_factors=[
+                            "Complete routing table inspected without matching default or subnet route."
+                        ],
                         weakening_factors=["Unmodeled default gateway."],
                     )
                 )
@@ -392,7 +669,9 @@ class InvestigationEngine:
         query = ReachabilityQuery(
             source_ip=src_ip or "0.0.0.0",
             destination_ip=dst_ip or "0.0.0.0",
-            protocol=TransportProtocolConstraint.TCP if scope.transport_protocol == "TCP" else TransportProtocolConstraint.ANY,
+            protocol=TransportProtocolConstraint.TCP
+            if scope.transport_protocol == "TCP"
+            else TransportProtocolConstraint.ANY,
             destination_port=scope.destination_port,
         )
 
@@ -730,7 +1009,9 @@ class InvestigationEngine:
             case.sufficiency = EvidenceSufficiency.INSUFFICIENT
             case.evidence_graph = EvidenceGraph()
             case.candidate_explanations = candidates
-            case.explicit_limitations = ["Cannot perform differential analysis without at least two recorded snapshots."]
+            case.explicit_limitations = [
+                "Cannot perform differential analysis without at least two recorded snapshots."
+            ]
             case.reproduction_steps = ["Capture baseline snapshot before applying changes."]
             return
 
@@ -775,7 +1056,9 @@ class InvestigationEngine:
                     f"ev-snap-base-{base_snap.snapshot_id}",
                     f"ev-snap-target-{target_snap.snapshot_id}",
                 ],
-                strengthening_factors=["Audit log or change ticket correlating exact timestamp with snapshot creation."],
+                strengthening_factors=[
+                    "Audit log or change ticket correlating exact timestamp with snapshot creation."
+                ],
                 weakening_factors=["Unrelated concurrent background topology discovery drift."],
             )
         )
@@ -813,7 +1096,9 @@ class InvestigationEngine:
         query = ReachabilityQuery(
             source_ip=src_ip,
             destination_ip=dst_ip,
-            protocol=TransportProtocolConstraint.TCP if case.scope.transport_protocol == "TCP" else TransportProtocolConstraint.ANY,
+            protocol=TransportProtocolConstraint.TCP
+            if case.scope.transport_protocol == "TCP"
+            else TransportProtocolConstraint.ANY,
             destination_port=case.scope.destination_port,
         )
 

@@ -36,7 +36,9 @@ from network_twin.simulation.models import (
 from network_twin.storage.metadata_store import MetadataStore
 
 
-def build_test_network_model(model_id: str = "test-model-inv-01", if_state: AdministrativeState = AdministrativeState.DOWN) -> NetworkModel:
+def build_test_network_model(
+    model_id: str = "test-model-inv-01", if_state: AdministrativeState = AdministrativeState.DOWN
+) -> NetworkModel:
     """Constructs a deterministic 2-node router network model for investigation tests."""
     r1 = ModelNode(
         node_id="router-1",

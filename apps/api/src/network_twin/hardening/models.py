@@ -19,8 +19,12 @@ class AdversarialTestCase(BaseModel):
     name: str = Field(..., description="Human-readable title of the adversarial verification case")
     category: AdversarialCategory = Field(..., description="Target category under verification")
     description: str = Field(..., description="Detailed description of what edge case is tested")
-    hand_verifiable_oracle: str = Field(..., description="Independently established expected outcome and mathematical rationale")
-    expected_status: str = Field(..., description="Expected status string (e.g., REACHABLE, BLOCKED, INDETERMINATE, PASS, FAIL)")
+    hand_verifiable_oracle: str = Field(
+        ..., description="Independently established expected outcome and mathematical rationale"
+    )
+    expected_status: str = Field(
+        ..., description="Expected status string (e.g., REACHABLE, BLOCKED, INDETERMINATE, PASS, FAIL)"
+    )
     expected_reason_code: str = Field(..., description="Expected reason code string")
 
 

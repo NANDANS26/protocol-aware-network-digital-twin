@@ -41,8 +41,7 @@ class CaptureCorpus:
             with open(manifest_file, encoding="utf-8") as f:
                 data = json.load(f)
             self._items = {
-                item["capture_id"]: CaptureManifestItem.model_validate(item)
-                for item in data.get("captures", [])
+                item["capture_id"]: CaptureManifestItem.model_validate(item) for item in data.get("captures", [])
             }
 
     def list_captures(self) -> list[CaptureManifestItem]:

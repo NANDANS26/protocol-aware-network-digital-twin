@@ -29,9 +29,7 @@ class ReferenceDecoder:
         packets = []
 
         while offset + 16 <= len(data):
-            ts_sec, ts_usec, cap_len, orig_len = struct.unpack(
-                f"{endian}IIII", data[offset : offset + 16]
-            )
+            ts_sec, ts_usec, cap_len, orig_len = struct.unpack(f"{endian}IIII", data[offset : offset + 16])
             offset += 16
             if offset + cap_len > len(data):
                 break
@@ -86,9 +84,7 @@ class ReferenceDecoder:
             if len(pkt_bytes) < offset + 28:
                 result["status"] = "malformed"
                 return result
-            hw_type, proto_type, hw_len, proto_len, opcode = struct.unpack(
-                "!HHBBH", pkt_bytes[offset : offset + 8]
-            )
+            hw_type, proto_type, hw_len, proto_len, opcode = struct.unpack("!HHBBH", pkt_bytes[offset : offset + 8])
             s_mac = ":".join(f"{b:02x}" for b in pkt_bytes[offset + 8 : offset + 14])
             s_ip = ".".join(str(b) for b in pkt_bytes[offset + 14 : offset + 18])
             t_mac = ":".join(f"{b:02x}" for b in pkt_bytes[offset + 18 : offset + 24])
@@ -156,9 +152,7 @@ class ReferenceDecoder:
             if len(pkt_bytes) < offset + 40:
                 result["status"] = "malformed"
                 return result
-            vtc_fl, payload_len, next_hdr, hop_limit = struct.unpack(
-                "!IHBB", pkt_bytes[offset : offset + 8]
-            )
+            vtc_fl, payload_len, next_hdr, hop_limit = struct.unpack("!IHBB", pkt_bytes[offset : offset + 8])
             src_ip = str(ipaddress.IPv6Address(pkt_bytes[offset + 8 : offset + 24]))
             dst_ip = str(ipaddress.IPv6Address(pkt_bytes[offset + 24 : offset + 40]))
 
@@ -236,9 +230,7 @@ class ReferenceDecoder:
             # Check for HTTP or TLS
             if payload:
                 if (src_port == 80 or dst_port == 80) and (
-                    payload.startswith(b"GET ")
-                    or payload.startswith(b"POST ")
-                    or payload.startswith(b"HTTP/1.")
+                    payload.startswith(b"GET ") or payload.startswith(b"POST ") or payload.startswith(b"HTTP/1.")
                 ):
                     first_line = payload.split(b"\r\n")[0].decode("ascii", errors="replace")
                     result["application_layer"] = {

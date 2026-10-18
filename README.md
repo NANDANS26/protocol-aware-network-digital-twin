@@ -1,12 +1,12 @@
 # Protocol-Aware Network Digital Twin & Security Verification Engine
 
-[![Phase 10 Evidence-Backed Network Investigations](https://img.shields.io/badge/Phase%2010-Incident%20Investigations%20Verified-brightgreen)](#)
+[![Phase 11 Reproducible Investigation Replay & Evidence Integrity](https://img.shields.io/badge/Phase%2011-Replay%20%26%20Integrity%20Verified-brightgreen)](#)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue)](#)
 [![Python Version](https://img.shields.io/badge/Python-3.11%2B-blue)](#)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, reproducible end-to-end benchmarking, adversarial verification hardening, real-capture differential testing, and evidence-backed incident investigation.
+An enterprise-grade, high-performance platform for network protocol analysis, stateful connection tracking, evidence-based topology reconstruction, versioned digital twinning, deterministic formal verification, isolated protocol fuzzing, predictive network world modeling, reproducible end-to-end benchmarking, adversarial verification hardening, real-capture differential testing, evidence-backed incident investigation, and reproducible investigation replay with cryptographic evidence integrity.
 
 ---
 
@@ -27,28 +27,25 @@ The platform provides a unified system combining low-latency systems software wi
 11. **Adversarial Verification & Trustworthy Hardening**: Independent hand-verifiable oracles, snapshot immutability, elimination of false PASS on unresolved evidence, true subnet and port ACL shadowing detection, and parser resilience.
 12. **Real-Capture Validation & Mathematical Differential Oracle**: Versioned capture corpus with verifiable provenance, independent pure Python reference decoder, metamorphic invariant testing (PCAP vs PCAPNG format equivalence, timestamp shifting, noise injection), and isolated native process memory telemetry.
 13. **Evidence-Backed Incident Investigation & Root-Cause Analysis**: Strongly typed incident cases, epistemological evidence grounding (OBSERVED, INFERRED, SIMULATED, PREDICTED), zero-fabrication guardrails, 5 specialized workflows (Connectivity, Policy, DNS, Relationship, Changes), and isolated counterfactual remediation validation.
-14. **Professional React Engineering Workstation**: High-density dark engineering visual shell, incident investigation workbench, real-capture workbench, adversarial hardening workbench, benchmark workbench, predictive workbench, and telemetry cockpit.
+14. **Reproducible Investigation Replay & Cryptographic Evidence Integrity**: Immutable execution snapshots (`InvestigationExecutionRecord`), RFC 8785 canonical evidence serialization with SHA-256 fingerprinting, epistemological integrity disclaimers, deterministic replay engine (`REPLAY_IDENTICAL` vs `REPLAY_DIFFERENT`), structural finding diffing, and exportable audit packages.
+15. **Professional React Engineering Workstation**: High-density dark engineering visual shell, incident investigation & replay cockpit, real-capture workbench, adversarial hardening workbench, benchmark workbench, predictive workbench, and telemetry cockpit.
 
 ---
 
-## 2. Current Implementation Status (Phase 10 Operational)
+## 2. Current Implementation Status (Phase 11 Operational)
 
-Phase 10 delivers an evidence-grounded, explainable incident investigation subsystem built on top of the verified digital twin:
+Phase 11 delivers reproducible investigation replay and cryptographic evidence integrity built on top of the verified digital twin:
 
-- **Epistemological Classification**: Rigorous separation between `OBSERVED` packet facts, `INFERRED` endpoint states, `SIMULATED` forwarding decisions, and `PREDICTED` statistical forecasts.
-- **Strict Anti-Fabrication**: Unknown or unmodeled endpoints and packets produce explicit `INDETERMINATE` and `INSUFFICIENT_EVIDENCE` states; never fabricated confirmed causes.
-- **5 Deterministic Investigation Workflows**:
-  - *Connectivity Failure*: LPM routing, down interface detection, next-hop resolution, ACL drop tracing.
-  - *Unexpected Policy Decision*: Firewall rule evaluation, default policy drops, rule shadowing detection.
-  - *DNS & Service Resolution*: Non-zero RCODEs (NXDOMAIN/SERVFAIL), unresponded queries, zero-traffic detection.
-  - *Unexpected Traffic Relationships*: Correlates observed flows vs reconstructed topology without rogue link fabrication.
-  - *Change-Related Behavior*: Snapshot mutation diffing isolating structural and route alterations.
-- **Isolated Counterfactual Remediation**: Deep-clones twin models in isolation, applies hypothetical mutations (`SET_INTERFACE_STATE`, `ADD_FIREWALL_RULE`, `ADD_ROUTE`), and verifies `REMEDIAL_ACTION_CONFIRMED` outcomes side-by-side.
-- **Persistence & API Contracts**: SQLite Schema Version 7 migration (`investigation_cases`), 7 REST endpoints under `/api/v1/twin/investigations`.
-- **React Incident Investigation Workbench**: Dedicated interactive workbench (`InvestigationWorkbench.tsx`) with workflow selector, epistemological badges, ranked root cause cards, evidence timeline/graph visualizer, side-by-side counterfactual comparisons, bounded limitations, and reproducible evidence instructions.
-- **Comprehensive Quality Gates**: 166 passed pytest tests (0 failures), 44 passed Vitest tests (0 failures), 100% C++ engine tests (26 doctest cases / 183 assertions), strict TypeScript (`tsc --noEmit`), and Ruff linting (0 errors).
+- **Epistemological Classification & Integrity Disclaimers**: Rigorous separation between `OBSERVED`, `INFERRED`, `SIMULATED`, and `PREDICTED` evidence, accompanied by mandatory disclaimers distinguishing cryptographic data integrity from external physical ground truth.
+- **Cryptographic Evidence Hashing**: Canonical RFC 8785 JSON serialization with sorted keys and consistent float/datetime formatting. Generates per-item SHA-256 hashes and composite evidence graph digests.
+- **Execution vs. Case Separation (Schema v8)**: Mutable incident case definitions (`investigation_cases`) are cleanly separated from immutable execution records (`investigation_executions`), maintaining full run lineage (`replay_of_execution_id`).
+- **Deterministic Replay Engine**: Re-executes historical investigations against isolated digital twin states with strict input dependency validation (`REPLAY_NOT_POSSIBLE` if inputs missing), returning structural diffs (`ReplayComparison`) and bounded replay statuses (`REPLAY_IDENTICAL`, `REPLAY_DIFFERENT`, `REPLAY_INCOMPLETE`).
+- **Verifiable Audit Packages**: Self-contained exportable JSON audit packages (`AuditPackExport`) bundling execution metadata, canonical evidence graphs, integrity reports, ranked findings, and step-by-step reproduction instructions.
+- **REST API Contracts**: 6 endpoints under `/api/v1/twin/investigations` for execution history, verification, replay, diff comparison, and audit export.
+- **React Replay Cockpit & Integrity Ledger**: Integrated into `InvestigationWorkbench.tsx` with Execution History table, inline cryptographic verification reports, Replay Comparison modal, and Audit Pack download modal.
+- **Comprehensive Quality Gates**: 176 passed pytest tests (0 failures), 46 passed Vitest tests (0 failures), 100% C++ engine tests (26 doctest cases / 183 assertions), strict TypeScript (`tsc --noEmit`), and Ruff linting (0 errors).
 
-See [docs/status/implementation-status.md](docs/status/implementation-status.md), [docs/audits/phase09_capture_audit.md](docs/audits/phase09_capture_audit.md), and [docs/audits/phase10_investigation_audit.md](docs/audits/phase10_investigation_audit.md) for full audit reports.
+See [docs/status/implementation-status.md](docs/status/implementation-status.md), [docs/audits/phase10_investigation_audit.md](docs/audits/phase10_investigation_audit.md), and [docs/audits/phase11_replay_integrity_audit.md](docs/audits/phase11_replay_integrity_audit.md) for full audit reports.
 
 ---
 

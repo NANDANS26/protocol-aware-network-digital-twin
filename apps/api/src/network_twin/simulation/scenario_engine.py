@@ -223,9 +223,7 @@ class ScenarioEngine:
                     return False
                 return True
 
-            target_node.routing_table = [
-                r for r in target_node.routing_table if _should_keep_route(r)
-            ]
+            target_node.routing_table = [r for r in target_node.routing_table if _should_keep_route(r)]
 
         elif action.action_type == SimulationActionType.MODIFY_ROUTE:
             route_id = params.get("route_id")

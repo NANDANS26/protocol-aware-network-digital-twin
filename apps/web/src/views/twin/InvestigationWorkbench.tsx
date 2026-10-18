@@ -8,6 +8,12 @@ import type {
   EvidenceSufficiency,
   CreateInvestigationRequest,
   RunCounterfactualRequest,
+  InvestigationExecutionRecord,
+  ExecutionIntegrityReport,
+  ReplayComparison,
+  AuditPackExport,
+  ReplayStatus,
+  IntegrityStatus,
 } from '../../types/investigations';
 import {
   Search,
@@ -25,6 +31,12 @@ import {
   FileText,
   Activity,
   GitBranch,
+  History,
+  ShieldCheck,
+  RotateCcw,
+  XCircle,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 export const InvestigationWorkbench: React.FC = () => {
@@ -35,6 +47,19 @@ export const InvestigationWorkbench: React.FC = () => {
   const [executing, setExecuting] = useState<boolean>(false);
   const [counterfactualLoading, setCounterfactualLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Phase 11: Execution History & Replay State
+  const [executions, setExecutions] = useState<InvestigationExecutionRecord[]>([]);
+  const [loadingExecutions, setLoadingExecutions] = useState<boolean>(false);
+  const [verifyingExecId, setVerifyingExecId] = useState<string | null>(null);
+  const [integrityReports, setIntegrityReports] = useState<Record<string, ExecutionIntegrityReport>>({});
+  const [expandedIntegrityId, setExpandedIntegrityId] = useState<string | null>(null);
+  const [replayingExecId, setReplayingExecId] = useState<string | null>(null);
+  const [activeComparison, setActiveComparison] = useState<ReplayComparison | null>(null);
+  const [showReplayModal, setShowReplayModal] = useState<boolean>(false);
+  const [auditPackExport, setAuditPackExport] = useState<AuditPackExport | null>(null);
+  const [showAuditPackModal, setShowAuditPackModal] = useState<boolean>(false);
+  const [copiedAuditPack, setCopiedAuditPack] = useState<boolean>(false);
 
   // Modal State for New Investigation
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
@@ -54,6 +79,23 @@ export const InvestigationWorkbench: React.FC = () => {
   const [cfNodeId, setCfNodeId] = useState<string>('router-1');
   const [cfIfaceId, setCfIfaceId] = useState<string>('eth1');
   const [cfState, setCfState] = useState<string>('UP');
+
+  // Load executions list for selected case
+  const loadExecutions = useCallback(async (invId: string) => {
+    if (!invId) {
+      setExecutions([]);
+      return;
+    }
+    try {
+      setLoadingExecutions(true);
+      const list = await apiClient.listInvestigationExecutions(invId);
+      setExecutions(list);
+    } catch (err: unknown) {
+      console.error('Failed to load execution records:', err);
+    } finally {
+      setLoadingExecutions(false);
+    }
+  }, []);
 
   // Load cases list
   const loadCases = useCallback(async () => {
@@ -95,8 +137,9 @@ export const InvestigationWorkbench: React.FC = () => {
   useEffect(() => {
     if (selectedCaseId) {
       loadCaseDetails(selectedCaseId);
+      loadExecutions(selectedCaseId);
     }
-  }, [selectedCaseId, loadCaseDetails]);
+  }, [selectedCaseId, loadCaseDetails, loadExecutions]);
 
   // Handle case execution
   const handleExecute = async () => {
@@ -107,10 +150,65 @@ export const InvestigationWorkbench: React.FC = () => {
       const updated = await apiClient.executeInvestigation(selectedCaseId);
       setCurrentCase(updated);
       setCases((prev) => prev.map((c) => (c.investigation_id === updated.investigation_id ? updated : c)));
+      await loadExecutions(selectedCaseId);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to execute investigation.');
     } finally {
       setExecuting(false);
+    }
+  };
+
+  // Handle verify execution integrity
+  const handleVerifyIntegrity = async (execId: string) => {
+    if (!selectedCaseId) return;
+    try {
+      setVerifyingExecId(execId);
+      setError(null);
+      const report = await apiClient.verifyExecutionIntegrity(selectedCaseId, execId);
+      setIntegrityReports((prev) => ({ ...prev, [execId]: report }));
+      setExpandedIntegrityId((prev) => (prev === execId ? null : execId));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Integrity verification failed.');
+    } finally {
+      setVerifyingExecId(null);
+    }
+  };
+
+  // Handle deterministic replay
+  const handleReplayExecution = async (execId: string) => {
+    if (!selectedCaseId) return;
+    try {
+      setReplayingExecId(execId);
+      setError(null);
+      const res = await apiClient.replayInvestigationExecution(selectedCaseId, execId);
+      setActiveComparison(res.comparison);
+      setShowReplayModal(true);
+      await loadExecutions(selectedCaseId);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Replay execution failed.');
+    } finally {
+      setReplayingExecId(null);
+    }
+  };
+
+  // Handle export audit pack
+  const handleExportAuditPack = async (execId: string) => {
+    if (!selectedCaseId) return;
+    try {
+      setError(null);
+      const pack = await apiClient.exportExecutionAuditPack(selectedCaseId, execId);
+      setAuditPackExport(pack);
+      setShowAuditPackModal(true);
+
+      const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-pack-${execId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to export audit pack.');
     }
   };
 
@@ -283,6 +381,66 @@ export const InvestigationWorkbench: React.FC = () => {
     }
   };
 
+  const renderReplayStatusBadge = (status: ReplayStatus) => {
+    switch (status) {
+      case 'REPLAY_IDENTICAL':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> REPLAY IDENTICAL
+          </span>
+        );
+      case 'REPLAY_DIFFERENT':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-700 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3 text-amber-400" /> REPLAY DIFFERENT
+          </span>
+        );
+      case 'REPLAY_INCOMPLETE':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-950 text-blue-300 border border-blue-700 flex items-center gap-1">
+            <HelpCircle className="w-3 h-3 text-blue-400" /> REPLAY INCOMPLETE
+          </span>
+        );
+      case 'REPLAY_NOT_POSSIBLE':
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-700 flex items-center gap-1">
+            <XCircle className="w-3 h-3 text-rose-400" /> REPLAY NOT POSSIBLE
+          </span>
+        );
+    }
+  };
+
+  const renderIntegrityStatusBadge = (status: IntegrityStatus) => {
+    switch (status) {
+      case 'VERIFIED':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" /> VERIFIED
+          </span>
+        );
+      case 'MODIFIED':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-700 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3 text-rose-400" /> MODIFIED
+          </span>
+        );
+      case 'MISSING_SOURCE':
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-700 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3 text-amber-400" /> MISSING SOURCE
+          </span>
+        );
+      case 'UNSUPPORTED_SCHEMA':
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-gray-800 text-gray-300 border border-gray-600 flex items-center gap-1">
+            <HelpCircle className="w-3 h-3 text-gray-400" /> UNSUPPORTED SCHEMA
+          </span>
+        );
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* HEADER BANNER */}
@@ -290,11 +448,11 @@ export const InvestigationWorkbench: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800">
-                Phase 10 Verified
+              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800">
+                Phase 11 Verified
               </span>
               <h2 className="text-lg font-bold text-white tracking-wide">
-                Evidence-Backed Network Incident Investigation & Root-Cause Analysis
+                Evidence-Backed Network Incident Investigation & Reproducible Replay
               </h2>
             </div>
             <p className="text-xs text-gray-400 mt-1 max-w-3xl">
@@ -634,6 +792,153 @@ export const InvestigationWorkbench: React.FC = () => {
                   </ol>
                 </div>
               </div>
+
+              {/* PHASE 11: REPRODUCIBLE EXECUTION LEDGER & INTEGRITY AUDIT */}
+              <div className="bg-surface border border-gray-800 rounded-lg p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-emerald-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-300">
+                      Execution History & Replay Audit Ledger ({executions.length} runs)
+                    </h4>
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1 self-start sm:self-auto">
+                    <ShieldCheck className="w-3 h-3" /> Phase 11 Verified
+                  </span>
+                </div>
+
+                {executions.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500 text-xs italic">
+                    {loadingExecutions
+                      ? 'Loading historical execution records...'
+                      : 'No executions recorded yet. Click "Run Investigation" above to execute and capture an immutable execution record.'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {executions.map((exec) => {
+                      const rep = integrityReports[exec.execution_id];
+                      return (
+                        <div
+                          key={exec.execution_id}
+                          className="p-4 rounded-lg bg-gray-900 border border-gray-800 text-xs space-y-3 hover:border-gray-700 transition"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-bold text-gray-200">
+                                #{exec.execution_index} {exec.execution_id}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                                  exec.status === 'SUCCESS'
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    : 'bg-rose-950 text-rose-300 border border-rose-800'
+                                }`}
+                              >
+                                {exec.status}
+                              </span>
+                              {exec.replay_of_execution_id && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-700 flex items-center gap-1">
+                                  <RotateCcw className="w-3 h-3" /> Replay of {exec.replay_of_execution_id}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleVerifyIntegrity(exec.execution_id)}
+                                disabled={verifyingExecId === exec.execution_id}
+                                className="px-2.5 py-1 rounded bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-800 text-[11px] font-medium flex items-center gap-1 transition"
+                              >
+                                <ShieldCheck className={`w-3.5 h-3.5 ${verifyingExecId === exec.execution_id ? 'animate-spin' : ''}`} />
+                                <span>{verifyingExecId === exec.execution_id ? 'Verifying...' : 'Verify Integrity'}</span>
+                              </button>
+                              <button
+                                onClick={() => handleReplayExecution(exec.execution_id)}
+                                disabled={replayingExecId === exec.execution_id}
+                                className="px-2.5 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800 text-[11px] font-medium flex items-center gap-1 transition"
+                              >
+                                <RotateCcw className={`w-3.5 h-3.5 ${replayingExecId === exec.execution_id ? 'animate-spin' : ''}`} />
+                                <span>{replayingExecId === exec.execution_id ? 'Replaying...' : 'Replay Run'}</span>
+                              </button>
+                              <button
+                                onClick={() => handleExportAuditPack(exec.execution_id)}
+                                className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                                title="Export Self-Contained Audit Pack JSON"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Metadata row */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono text-gray-400 bg-gray-950 p-2.5 rounded border border-gray-800/80">
+                            <div>
+                              <span className="text-gray-500">Duration: </span>
+                              <span className="text-gray-200">{exec.execution_duration_ms} ms</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Started: </span>
+                              <span className="text-gray-200">{new Date(exec.started_at_iso).toLocaleString()}</span>
+                            </div>
+                            <div className="truncate" title={exec.overall_evidence_digest}>
+                              <span className="text-gray-500">Digest: </span>
+                              <span className="text-indigo-400">{exec.overall_evidence_digest.slice(0, 16)}...</span>
+                            </div>
+                          </div>
+
+                          {/* Expanded Integrity Report */}
+                          {expandedIntegrityId === exec.execution_id && rep && (
+                            <div className="mt-3 p-3.5 bg-gray-950 rounded-lg border border-indigo-950 space-y-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-800 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-white text-[11px]">Cryptographic Evidence Integrity Audit</span>
+                                  {renderIntegrityStatusBadge(rep.overall_status)}
+                                </div>
+                                <span className="text-[10px] text-gray-400 font-mono">
+                                  {rep.verified_count} of {rep.total_evidence_items} items verified
+                                </span>
+                              </div>
+
+                              {/* Epistemological Disclaimer */}
+                              <div className="p-2.5 bg-amber-950/20 border border-amber-900/40 rounded text-amber-300 text-[11px] flex items-start gap-2">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
+                                <span>{rep.disclaimer}</span>
+                              </div>
+
+                              {/* Evidence items breakdown */}
+                              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                {rep.item_reports.map((item) => (
+                                  <div
+                                    key={item.evidence_id}
+                                    className="flex items-center justify-between p-2 rounded bg-gray-900 border border-gray-800 text-[10px] font-mono"
+                                  >
+                                    <div className="truncate max-w-[50%]">
+                                      <span className="text-gray-200">{item.evidence_id}</span>
+                                      <span className="text-gray-500 ml-2">({item.node_type})</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-500">SHA: {item.computed_sha256.slice(0, 10)}...</span>
+                                      {item.verified ? (
+                                        <span className="text-emerald-400 flex items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3" /> VERIFIED
+                                        </span>
+                                      ) : (
+                                        <span className="text-rose-400 flex items-center gap-1" title={item.discrepancy_details || ''}>
+                                          <AlertCircle className="w-3 h-3" /> {item.status}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <div className="bg-surface border border-gray-800 rounded-lg p-12 text-center text-gray-400 space-y-3">
@@ -871,6 +1176,167 @@ export const InvestigationWorkbench: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* MODAL: REPLAY COMPARISON COCKPIT */}
+      {showReplayModal && activeComparison && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="bg-surface border border-gray-700 rounded-lg shadow-2xl max-w-2xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-emerald-400" />
+                  Deterministic Investigation Replay Cockpit
+                </h3>
+                <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                  Comparison: {activeComparison.comparison_id}
+                </div>
+              </div>
+              <div>{renderReplayStatusBadge(activeComparison.replay_status)}</div>
+            </div>
+
+            <div className="p-3 bg-gray-900 border border-gray-800 rounded-md text-xs text-gray-300">
+              <span className="font-semibold text-gray-200">Replay Summary: </span>
+              {activeComparison.summary}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-[11px] font-mono bg-gray-950 p-2.5 rounded border border-gray-800">
+              <div>
+                <span className="text-gray-500">Original Run: </span>
+                <span className="text-gray-300">{activeComparison.original_execution_id}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">Replayed Run: </span>
+                <span className="text-emerald-400">{activeComparison.replayed_execution_id}</span>
+              </div>
+            </div>
+
+            {/* Findings Differences */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Finding Differences ({activeComparison.findings_differences.length})
+              </span>
+              <div className="space-y-2">
+                {activeComparison.findings_differences.map((diff) => (
+                  <div
+                    key={diff.candidate_id}
+                    className="p-3 rounded bg-gray-900 border border-gray-800 text-xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-200">{diff.title}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                          diff.change_type === 'MATCHED'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                            : diff.change_type === 'MODIFIED'
+                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                            : 'bg-rose-950 text-rose-300 border border-rose-800'
+                        }`}
+                      >
+                        {diff.change_type}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-gray-400">
+                      <div>Orig Status: {diff.original_status || 'N/A'} (Score: {diff.original_score ?? 'N/A'})</div>
+                      <div>Replay Status: {diff.replayed_status || 'N/A'} (Score: {diff.replayed_score ?? 'N/A'})</div>
+                    </div>
+                    {diff.explanation && (
+                      <div className="text-[11px] text-gray-400 italic pt-1 border-t border-gray-800">
+                        {diff.explanation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Evidence graph differences */}
+            {activeComparison.evidence_differences.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                  Evidence Graph Discrepancies
+                </span>
+                <ul className="text-xs text-amber-300 space-y-1 font-mono">
+                  {activeComparison.evidence_differences.map((ed, idx) => (
+                    <li key={idx} className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3 h-3 text-amber-400" /> {ed}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={() => setShowReplayModal(false)}
+                className="px-4 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium"
+              >
+                Close Cockpit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: AUDIT PACK EXPORT PREVIEW */}
+      {showAuditPackModal && auditPackExport && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="bg-surface border border-gray-700 rounded-lg shadow-2xl max-w-xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Download className="w-4 h-4 text-indigo-400" />
+                  Self-Contained Verifiable Audit Pack
+                </h3>
+                <span className="text-[11px] text-gray-400 font-mono">
+                  Pack ID: {auditPackExport.audit_pack_id}
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                Downloaded
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs text-gray-300">
+              <span className="font-semibold text-gray-200">Offline Audit Instructions:</span>
+              <ol className="space-y-1 text-[11px] text-gray-400 font-mono list-decimal pl-4">
+                {auditPackExport.audit_instructions.map((inst, i) => (
+                  <li key={i}>{inst}</li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="p-3 bg-gray-950 rounded border border-gray-800 text-[10px] font-mono text-gray-400 space-y-1">
+              <div>Engine Version: {auditPackExport.execution.engine_version}</div>
+              <div>Rule Version: {auditPackExport.execution.rule_version}</div>
+              <div>Overall Evidence Digest: {auditPackExport.execution.overall_evidence_digest}</div>
+              <div>Integrity Status: {auditPackExport.integrity_report.overall_status}</div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(auditPackExport, null, 2));
+                  setCopiedAuditPack(true);
+                  setTimeout(() => setCopiedAuditPack(false), 2000);
+                }}
+                className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs flex items-center gap-1.5 border border-gray-700"
+              >
+                {copiedAuditPack ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedAuditPack ? 'Copied JSON' : 'Copy JSON'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAuditPackModal(false)}
+                className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

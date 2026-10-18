@@ -658,7 +658,9 @@ class VerificationEngine:
         return child_port == parent_port
 
     @staticmethod
-    def _is_proto_contained(child_proto: TransportProtocolConstraint, parent_proto: TransportProtocolConstraint) -> bool:
+    def _is_proto_contained(
+        child_proto: TransportProtocolConstraint, parent_proto: TransportProtocolConstraint
+    ) -> bool:
         if parent_proto == TransportProtocolConstraint.ANY:
             return True
         return child_proto == parent_proto

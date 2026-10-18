@@ -133,3 +133,117 @@ export interface RunCounterfactualRequest {
   action_type: string;
   action_parameters: Record<string, any>;
 }
+
+// --- Phase 11: Reproducible Replay & Evidence Integrity Types ---
+
+export type ReplayStatus =
+  | 'REPLAY_IDENTICAL'
+  | 'REPLAY_DIFFERENT'
+  | 'REPLAY_INCOMPLETE'
+  | 'REPLAY_NOT_POSSIBLE';
+
+export type IntegrityStatus =
+  | 'VERIFIED'
+  | 'MODIFIED'
+  | 'MISSING_SOURCE'
+  | 'UNSUPPORTED_SCHEMA';
+
+export interface EvidenceIntegrityItem {
+  evidence_id: string;
+  evidence_class: EvidenceClass;
+  node_type: EvidenceNodeType;
+  recorded_sha256: string;
+  computed_sha256: string;
+  source_uri: string;
+  verified: boolean;
+  status: IntegrityStatus;
+  discrepancy_details?: string | null;
+}
+
+export interface ExecutionIntegrityReport {
+  execution_id: string;
+  investigation_id: string;
+  overall_status: IntegrityStatus;
+  hash_algorithm: string;
+  schema_version: string;
+  total_evidence_items: number;
+  verified_count: number;
+  modified_count: number;
+  missing_count: number;
+  item_reports: EvidenceIntegrityItem[];
+  verified_at_iso: string;
+  disclaimer: string;
+}
+
+export interface FindingDifference {
+  candidate_id: string;
+  title: string;
+  change_type: 'MATCHED' | 'MODIFIED' | 'ADDED' | 'REMOVED';
+  original_status?: CandidateStatus | null;
+  replayed_status?: CandidateStatus | null;
+  original_score?: number | null;
+  replayed_score?: number | null;
+  original_rank?: number | null;
+  replayed_rank?: number | null;
+  explanation: string;
+}
+
+export interface ReplayComparison {
+  comparison_id: string;
+  original_execution_id: string;
+  replayed_execution_id: string;
+  investigation_id: string;
+  replay_status: ReplayStatus;
+  is_identical: boolean;
+  original_root_cause_id?: string | null;
+  replayed_root_cause_id?: string | null;
+  findings_differences: FindingDifference[];
+  evidence_differences: string[];
+  summary: string;
+  compared_at_iso: string;
+}
+
+export interface InvestigationExecutionRecord {
+  execution_id: string;
+  investigation_id: string;
+  execution_index: number;
+  investigation_type: InvestigationType;
+  engine_version: string;
+  rule_version: string;
+  started_at_iso: string;
+  completed_at_iso: string;
+  execution_duration_ms: number;
+  status: string;
+  replay_of_execution_id?: string | null;
+  normalized_scope: InvestigationScope;
+  model_id?: string | null;
+  model_fingerprint?: string | null;
+  referenced_capture_ids: string[];
+  referenced_snapshot_ids: string[];
+  evidence_graph: EvidenceGraph;
+  evidence_integrity_hashes: Record<string, string>;
+  overall_evidence_digest: string;
+  candidate_explanations: CandidateExplanation[];
+  primary_root_cause_id?: string | null;
+  sufficiency: EvidenceSufficiency;
+  counterfactual_comparisons: CounterfactualComparison[];
+  unresolved_questions: string[];
+  known_limitations: string[];
+  reproduction_steps: string[];
+  execution_notes: string;
+}
+
+export interface ReplayExecutionResponse {
+  replayed_execution: InvestigationExecutionRecord;
+  comparison: ReplayComparison;
+}
+
+export interface AuditPackExport {
+  audit_pack_id: string;
+  exported_at_iso: string;
+  export_schema_version: string;
+  execution: InvestigationExecutionRecord;
+  integrity_report: ExecutionIntegrityReport;
+  audit_instructions: string[];
+}
+

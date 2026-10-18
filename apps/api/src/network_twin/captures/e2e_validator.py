@@ -69,7 +69,9 @@ class EndToEndValidator:
             _ = ReachabilityQuery(
                 source_ip=first_flow.src_ip,
                 destination_ip=first_flow.dst_ip,
-                protocol=TransportProtocolConstraint.TCP if first_flow.ip_proto == 6 else TransportProtocolConstraint.UDP,
+                protocol=TransportProtocolConstraint.TCP
+                if first_flow.ip_proto == 6
+                else TransportProtocolConstraint.UDP,
                 destination_port=first_flow.dst_port,
             )
 
