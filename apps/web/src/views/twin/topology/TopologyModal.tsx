@@ -104,13 +104,13 @@ export const TopologyModal: React.FC<TopologyModalProps> = ({
       <div
         ref={modalContentRef}
         data-testid="topology-modal-content"
-        className="w-full h-full max-w-[1800px] max-h-[96vh] bg-slate-950 border border-gray-800 rounded-xl shadow-2xl flex flex-col overflow-hidden text-gray-100"
+        className="w-full h-full max-w-[1850px] max-h-[96vh] bg-[#0b0f19] border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800 bg-slate-900/90 shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/90 bg-slate-900/90 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-950/90 border border-indigo-700/60 text-indigo-400">
+            <div className="p-2 rounded-xl bg-indigo-950/80 border border-indigo-700/50 text-indigo-400">
               <Network className="w-5 h-5" />
             </div>
             <div>
@@ -118,13 +118,14 @@ export const TopologyModal: React.FC<TopologyModalProps> = ({
                 <h2 id="topology-modal-title" className="text-base sm:text-lg font-bold text-white tracking-tight">
                   Interactive Network Topology
                 </h2>
-                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   Full-Screen Workspace
                 </span>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Hierarchical clustered twin with boundary edge routing &bull;{' '}
-                <span className="font-mono text-gray-300 font-semibold">{nodeCount}</span> nodes &bull;{' '}
+                <span className="font-mono text-slate-300 font-semibold">{nodeCount}</span> nodes &bull;{' '}
                 <span className="font-mono text-cyan-400 font-semibold">{subnetCount}</span> subnets &bull;{' '}
                 <span className="font-mono text-purple-400 font-semibold">{routerCount}</span> transit routers &bull;{' '}
                 <span className="font-mono text-amber-400 font-semibold">{edgeCount}</span> relationships
@@ -139,16 +140,19 @@ export const TopologyModal: React.FC<TopologyModalProps> = ({
               onClick={onClose}
               aria-label="Close Interactive Topology"
               title="Close Interactive Topology (Esc)"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <X className="w-4 h-4" />
               <span className="text-xs font-mono hidden sm:inline">Close</span>
+              <kbd className="hidden sm:inline-block px-1.5 py-0.2 text-[10px] font-mono bg-slate-900 border border-slate-700 rounded text-slate-400 ml-0.5">
+                Esc
+              </kbd>
             </button>
           </div>
         </div>
 
         {/* Modal Body / Graph Canvas Viewport */}
-        <div className="flex-1 min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col bg-slate-950">
+        <div className="flex-1 min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col bg-[#080c14]">
           <TopologyGraphView
             topology={topology}
             selectedNode={selectedNode}

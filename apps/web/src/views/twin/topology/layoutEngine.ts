@@ -38,6 +38,7 @@ export interface SubnetContainerBox {
   label: string;
   gatewayIp?: string;
   hostCount: number;
+  serviceCount?: number;
   x: number;
   y: number;
   width: number;
@@ -395,6 +396,10 @@ export function computeHierarchicalLayout(
     const isCollapsed = collapsedSubnets.has(sId);
     const hosts = sData.assets;
     const memberNodeIds: string[] = [sId];
+    const totalServices = hosts.reduce((acc, h) => {
+      const hId = h.node_id || h.id;
+      return acc + (hostServiceMap.get(hId)?.length || 0);
+    }, 0);
 
     if (isCollapsed) {
       const boxWidth = 240;
@@ -405,6 +410,7 @@ export function computeHierarchicalLayout(
         label: sData.node.label,
         gatewayIp: sData.gatewayIp,
         hostCount: hosts.length,
+        serviceCount: totalServices,
         x: currentContainerX,
         y: 0,
         width: boxWidth,
@@ -546,6 +552,7 @@ export function computeHierarchicalLayout(
       label: sData.node.label,
       gatewayIp: sData.gatewayIp,
       hostCount: hosts.length,
+      serviceCount: totalServices,
       x: currentContainerX,
       y: 0,
       width: boxWidth,

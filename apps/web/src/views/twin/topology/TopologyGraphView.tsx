@@ -7,6 +7,9 @@ import {
   Search,
   X,
   Layers,
+  ChevronRight,
+  ChevronDown,
+  Info,
 } from 'lucide-react';
 import type {
   TopologyGraph,
@@ -56,6 +59,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
   const [nodeTypeFilter, setNodeTypeFilter] = useState<string>('ALL');
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState<boolean>(true);
+  const [showRawProperties, setShowRawProperties] = useState<boolean>(false);
 
   // Subnet collapse state
   const [collapsedSubnets, setCollapsedSubnets] = useState<Set<string>>(new Set());
@@ -71,8 +75,19 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
     if (renderEvidenceClassBadge) {
       return renderEvidenceClassBadge(evClass);
     }
+    const colorClasses =
+      evClass === 'DIRECTLY_OBSERVED'
+        ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
+        : evClass === 'CONFIGURED'
+        ? 'bg-blue-950/80 text-blue-400 border-blue-800/60'
+        : evClass === 'INFERRED'
+        ? 'bg-amber-950/80 text-amber-400 border-amber-800/60'
+        : 'bg-slate-800 text-slate-400 border-slate-700';
+
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-800 text-gray-400 border border-gray-700 font-mono">
+      <span
+        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border font-mono ${colorClasses}`}
+      >
         {evClass || 'UNKNOWN'}
       </span>
     );
@@ -134,16 +149,23 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
     return { connectedNodeIds: nIds, connectedEdgeIds: eIds };
   }, [activeFocusId, topology]);
 
-  // Fit to View Calculation
+  // Robust Fit to View: calculates actual bounds with margins and centers viewport
   const handleFitToView = useCallback(() => {
     if (!containerRef.current || !layout.bounds) return;
     const { clientWidth, clientHeight } = containerRef.current;
     if (clientWidth === 0 || clientHeight === 0) return;
 
     const b = layout.bounds;
-    const scaleX = (clientWidth - 60) / Math.max(b.width, 100);
-    const scaleY = (clientHeight - 60) / Math.max(b.height, 100);
-    const optimalScale = Math.min(Math.max(0.3, Math.min(scaleX, scaleY)), 1.25);
+    // 64px padding around layout bounds
+    const paddingX = 64;
+    const paddingY = 64;
+    const availableW = Math.max(100, clientWidth - paddingX);
+    const availableH = Math.max(100, clientHeight - paddingY);
+
+    const scaleX = availableW / Math.max(b.width, 100);
+    const scaleY = availableH / Math.max(b.height, 100);
+    // Clamp optimal scale between 0.25 (for large enterprise graphs) and 1.15
+    const optimalScale = Math.min(Math.max(0.25, Math.min(scaleX, scaleY)), 1.15);
 
     const roundedScale = Number(optimalScale.toFixed(2));
     setZoomLevel(roundedScale);
@@ -154,19 +176,30 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
     setPanOffset({ x: offsetX, y: offsetY });
   }, [layout.bounds]);
 
-  // Automatically center on initial load
+  // Automatically center on initial load or layout bound changes
   useEffect(() => {
     if (topology && (topology.nodes || []).length > 0) {
       handleFitToView();
     }
-  }, [topology, handleFitToView]);
+  }, [topology, layout.bounds, handleFitToView]);
+
+  // ResizeObserver to adjust on window, modal, or drawer resize
+  useEffect(() => {
+    if (!containerRef.current || typeof ResizeObserver === 'undefined') return;
+    const el = containerRef.current;
+    const observer = new ResizeObserver(() => {
+      // Dimensions changed
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Zoom and Pan Controls
   const handleZoomIn = () => setZoomLevel((z) => Math.min(3.0, Number((z + 0.15).toFixed(2))));
   const handleZoomOut = () => setZoomLevel((z) => Math.max(0.25, Number((z - 0.15).toFixed(2))));
   const handleResetZoom = () => {
     setZoomLevel(1);
-    if (containerRef.current) {
+    if (containerRef.current && layout.bounds) {
       const { clientWidth, clientHeight } = containerRef.current;
       setPanOffset({
         x: Math.round(clientWidth / 2 - layout.bounds.centerX),
@@ -178,11 +211,12 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    const targetTag = (e.target as HTMLElement).tagName?.toLowerCase();
+    const target = e.target as HTMLElement;
+    const targetTag = target.tagName?.toLowerCase();
     if (
       targetTag === 'svg' ||
-      (e.target as HTMLElement).getAttribute('data-bg') === 'true' ||
-      targetTag === 'rect' && (e.target as HTMLElement).getAttribute('data-bg') === 'true'
+      target.getAttribute('data-bg') === 'true' ||
+      (targetTag === 'rect' && target.getAttribute('data-bg') === 'true')
     ) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
@@ -218,20 +252,21 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
       const ips = [
         ...(n.ip_addresses || []),
         ...((n.properties?.ip_addresses as string[]) || []),
-        (n.properties?.primary_ip as string) || '',
       ].map((ip) => ip.toLowerCase());
       const macs = [
         ...(n.mac_addresses || []),
         ...((n.properties?.mac_addresses as string[]) || []),
-      ].map((m) => m.toLowerCase());
-      const hostnames = ((n.properties?.hostnames as string[]) || []).map((h) => h.toLowerCase());
+      ].map((mac) => mac.toLowerCase());
+      const cidr = (n.subnet_cidr || (n.properties?.cidr_prefix as string) || '').toLowerCase();
+      const port = String(n.service_port || n.properties?.port || '');
 
       if (
         nId.includes(q) ||
         label.includes(q) ||
         ips.some((ip) => ip.includes(q)) ||
-        macs.some((m) => m.includes(q)) ||
-        hostnames.some((h) => h.includes(q))
+        macs.some((mac) => mac.includes(q)) ||
+        cidr.includes(q) ||
+        port.includes(q)
       ) {
         matches.add(n.node_id || n.id);
       }
@@ -248,44 +283,55 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
     handleResetZoom();
   };
 
+  // Node count summary for empty inspector onboarding
+  const subnetCount = (topology?.nodes || []).filter((n) => n.node_type === 'SUBNET').length;
+  const routerCount = (topology?.nodes || []).filter((n) => n.node_type === 'ROUTER').length;
+  const assetCount = (topology?.nodes || []).filter(
+    (n) => n.node_type === 'ASSET' || n.node_type === 'INTERFACE' || n.node_type === 'DNS_RESOLVER'
+  ).length;
+  const serviceCount = (topology?.nodes || []).filter((n) => n.node_type === 'SERVICE').length;
+  const flowCount = (topology?.edges || []).length;
+
   return (
     <div
       className={`space-y-3 ${isModal ? 'h-full flex flex-col min-h-0' : ''}`}
       data-testid="topology-graph-container"
     >
-      {/* Top Toolbar: Search, Filters, Viewport Controls, Actions, Legend */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-surface/60 p-2.5 sm:p-3 rounded-lg border border-gray-800 shadow-sm shrink-0">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Search box with Clear button */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-500 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search IP, Host, MAC, ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-7 py-1 text-xs bg-slate-950/80 border border-gray-800 rounded text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 font-mono w-48 sm:w-60"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                title="Clear search"
-                className="absolute right-2 top-2 text-gray-400 hover:text-white transition"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+      {/* Premium Grouped Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 bg-slate-900/90 p-2 sm:p-2.5 rounded-xl border border-slate-800 shadow-sm shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* GROUP 1: Search & Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-950/90 border border-slate-800 rounded-lg p-1">
+            {/* Search Input with Clear Button */}
+            <div className="relative flex items-center">
+              <Search className="w-3.5 h-3.5 absolute left-2 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search IP, Host, MAC, ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 pr-6 py-1 text-xs bg-transparent border-0 rounded text-slate-200 placeholder-slate-500 focus:outline-none font-mono w-44 sm:w-52"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                  title="Clear search"
+                  className="absolute right-1.5 text-slate-400 hover:text-white transition"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
 
-          {/* Node Type Filter */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span>Type:</span>
+            <div className="h-4 w-px bg-slate-800" />
+
+            {/* Node Type Filter */}
             <select
               value={nodeTypeFilter}
               onChange={(e) => setNodeTypeFilter(e.target.value)}
-              className="bg-slate-950/80 border border-gray-800 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-indigo-500 font-mono"
+              className="bg-transparent border-0 px-2 py-1 text-xs text-slate-300 focus:outline-none font-mono cursor-pointer"
             >
               <option value="ALL">All Nodes</option>
               <option value="SUBNET">Subnets Only</option>
@@ -293,48 +339,48 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
               <option value="ASSET">Assets Only</option>
               <option value="SERVICE">Services Only</option>
             </select>
-          </div>
 
-          {/* Evidence Class Filter */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span>Evidence:</span>
+            <div className="h-4 w-px bg-slate-800" />
+
+            {/* Evidence Class Filter */}
             <select
               value={evidenceClassFilter}
               onChange={(e) => onChangeEvidenceFilter(e.target.value)}
-              className="bg-slate-950/80 border border-gray-800 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-indigo-500 font-mono"
+              className="bg-transparent border-0 px-2 py-1 text-xs text-slate-300 focus:outline-none font-mono cursor-pointer"
             >
-              <option value="ALL">All Relationships</option>
-              <option value="DIRECTLY_OBSERVED">Observed Only</option>
-              <option value="CONFIGURED">Configured Only</option>
-              <option value="INFERRED">Inferred Only</option>
+              <option value="ALL">All Evidence</option>
+              <option value="DIRECTLY_OBSERVED">Observed</option>
+              <option value="CONFIGURED">Configured</option>
+              <option value="INFERRED">Inferred</option>
             </select>
           </div>
 
-          {/* Subnet Expand/Collapse All */}
-          <div className="flex items-center gap-1 border-l border-gray-800 pl-2 sm:pl-3">
+          {/* GROUP 2: Subnet Layout */}
+          <div className="flex items-center gap-1 bg-slate-950/90 border border-slate-800 rounded-lg p-1">
             <button
               onClick={expandAll}
               title="Expand All Subnets"
-              className="px-2 py-1 bg-surface-raised hover:bg-gray-800 rounded text-[11px] font-mono text-gray-300 hover:text-white border border-gray-800 transition"
+              className="px-2.5 py-1 hover:bg-slate-800 rounded text-[11px] font-mono text-slate-300 hover:text-white transition"
             >
               Expand All
             </button>
+            <div className="h-4 w-px bg-slate-800" />
             <button
               onClick={collapseAll}
               title="Collapse All Subnets"
-              className="px-2 py-1 bg-surface-raised hover:bg-gray-800 rounded text-[11px] font-mono text-gray-300 hover:text-white border border-gray-800 transition"
+              className="px-2.5 py-1 hover:bg-slate-800 rounded text-[11px] font-mono text-slate-300 hover:text-white transition"
             >
               Collapse All
             </button>
           </div>
 
-          {/* Canvas Zoom & View Controls */}
-          <div className="flex items-center gap-1 bg-slate-950/80 border border-gray-800 rounded px-1.5 py-0.5">
+          {/* GROUP 3: Viewport & Navigation */}
+          <div className="flex items-center gap-1 bg-slate-950/90 border border-slate-800 rounded-lg p-1">
             <button
               type="button"
               onClick={handleZoomIn}
               title="Zoom In (+)"
-              className="p-1 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition"
+              className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white transition"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
@@ -342,61 +388,58 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
               type="button"
               onClick={handleZoomOut}
               title="Zoom Out (-)"
-              className="p-1 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition"
+              className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white transition"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
+            <div className="h-4 w-px bg-slate-800" />
             <button
               type="button"
               onClick={handleFitToView}
               title="Fit Entire Topology to View"
-              className="p-1 hover:bg-gray-800 rounded text-gray-300 hover:text-white transition"
+              className="p-1 hover:bg-slate-800 rounded text-indigo-400 hover:text-indigo-300 transition"
             >
-              <Maximize2 className="w-3.5 h-3.5 text-indigo-400" />
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleResetAll}
+              title="Reset View & All Filters"
+              className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={handleResetZoom}
-              title="Reset 100%"
-              className="px-1.5 py-0.5 hover:bg-gray-800 rounded text-[10px] font-mono text-gray-300 hover:text-white transition"
+              title="Click to reset 100%"
+              className="px-1.5 py-0.5 hover:bg-slate-800 rounded text-[11px] font-mono font-medium text-slate-300 hover:text-white transition"
             >
               {(zoomLevel * 100).toFixed(0)}%
             </button>
           </div>
 
-          {/* Reset All Filters & Viewport */}
-          <button
-            type="button"
-            onClick={handleResetAll}
-            title="Reset All Filters, Search, and Viewport"
-            className="px-2 py-1 bg-surface-raised hover:bg-gray-800 rounded text-[11px] font-mono text-gray-300 hover:text-white border border-gray-800 transition flex items-center gap-1"
-          >
-            <RotateCcw className="w-3 h-3 text-gray-400" />
-            <span>Reset All</span>
-          </button>
-
-          {/* Details Inspector Toggle */}
+          {/* GROUP 4: Inspector & Actions */}
           <button
             type="button"
             onClick={() => setInspectorOpen((prev) => !prev)}
             title={inspectorOpen ? 'Hide Details Inspector' : 'Show Details Inspector'}
-            className={`px-2 py-1 rounded text-[11px] font-mono border transition flex items-center gap-1.5 ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium border transition flex items-center gap-1.5 ${
               inspectorOpen
-                ? 'bg-indigo-950/70 border-indigo-700/60 text-indigo-300'
-                : 'bg-surface-raised border-gray-800 text-gray-400 hover:text-white'
+                ? 'bg-indigo-950/80 border-indigo-700/60 text-indigo-300'
+                : 'bg-slate-950/90 border-slate-800 text-slate-400 hover:text-white'
             }`}
           >
-            <Layers className="w-3 h-3" />
+            <Layers className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{inspectorOpen ? 'Hide Details' : 'Show Details'}</span>
           </button>
 
-          {/* In-Page Open Modal Action */}
           {!isModal && onOpenModal && (
             <button
               type="button"
               onClick={onOpenModal}
               title="Open Interactive Full-Screen Topology Workspace"
-              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1.5 shadow-sm transition active:scale-95"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition active:scale-95"
             >
               <Maximize2 className="w-3.5 h-3.5" />
               <span>Open Interactive Topology</span>
@@ -404,8 +447,8 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
           )}
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-3 sm:gap-4 text-xs font-mono">
+        {/* Refined Legend */}
+        <div className="flex items-center gap-3 text-xs font-mono text-slate-400 select-none">
           <span className="flex items-center gap-1.5 text-blue-400">
             <span className="w-2.5 h-2.5 rounded bg-blue-600 border border-blue-400 inline-block" /> Subnet Hub
           </span>
@@ -413,10 +456,10 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
             <span className="w-2.5 h-2.5 rotate-45 bg-purple-600 border border-purple-400 inline-block" /> Router
           </span>
           <span className="flex items-center gap-1.5 text-emerald-400">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 border border-emerald-400 inline-block" /> Asset Node
+            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-700 border border-emerald-400 inline-block" /> Asset Node
           </span>
           <span className="flex items-center gap-1.5 text-amber-400">
-            <span className="w-2.5 h-2.5 rounded bg-amber-600 border border-amber-400 inline-block" /> Service
+            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Service
           </span>
         </div>
       </div>
@@ -432,20 +475,20 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
           ref={containerRef}
           className={`${
             inspectorOpen ? 'lg:col-span-3' : 'col-span-full'
-          } bg-slate-950 border border-gray-800 rounded-lg relative ${
+          } bg-[#080c14] border border-slate-800 rounded-xl relative ${
             isModal ? 'h-full min-h-[460px]' : 'min-h-[560px] h-[640px]'
           } flex items-center justify-center overflow-hidden shadow-inner transition-all duration-150 ${
             isPanning ? 'cursor-grabbing' : 'cursor-grab'
           }`}
         >
-          {/* Interaction status banner */}
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-2 text-[10px] font-mono text-gray-400 bg-slate-900/90 border border-gray-800 px-2.5 py-1 rounded shadow select-none pointer-events-none">
+          {/* Subtle Canvas Status Indicator */}
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-2 text-[10px] font-mono text-slate-400 bg-slate-900/90 border border-slate-800 px-2.5 py-1 rounded-md shadow-sm select-none pointer-events-none">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Interactive Clustered Canvas: Drag Pan | Scroll Zoom | Click Node or Edge</span>
+            <span>Interactive Twin: Drag Pan • Scroll Zoom • Click Node or Flow</span>
           </div>
 
           {searchQuery && (
-            <div className="absolute top-3 right-3 z-10 text-[10px] font-mono text-amber-300 bg-amber-950/80 border border-amber-800/80 px-2.5 py-1 rounded shadow select-none">
+            <div className="absolute top-3 right-3 z-10 text-[10px] font-mono text-amber-300 bg-amber-950/80 border border-amber-800/80 px-2.5 py-1 rounded-md shadow select-none">
               Found {matchingNodeIds.size} matching node{matchingNodeIds.size === 1 ? '' : 's'}
             </div>
           )}
@@ -460,7 +503,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
               onWheel={handleWheel}
             >
               <defs>
-                {/* Arrowhead Markers for Protocols */}
+                {/* Arrowhead Markers */}
                 <marker
                   id="arrow-cyan"
                   viewBox="0 0 10 10"
@@ -506,19 +549,19 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="#60a5fa" />
                 </marker>
 
-                {/* Canvas grid pattern */}
+                {/* Subtle dark canvas grid texture */}
                 <pattern id="twin-dot-grid" width="36" height="36" patternUnits="userSpaceOnUse">
-                  <circle cx="18" cy="18" r="0.75" fill="#334155" opacity="0.6" />
+                  <circle cx="18" cy="18" r="0.75" fill="#334155" opacity="0.4" />
                 </pattern>
               </defs>
 
               {/* Background Canvas Drag Surface */}
               <rect
                 data-bg="true"
-                x="-5000"
-                y="-5000"
-                width="10000"
-                height="10000"
+                x="-10000"
+                y="-10000"
+                width="20000"
+                height="20000"
                 fill="url(#twin-dot-grid)"
               />
 
@@ -528,7 +571,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                 {layout.subnetContainers.map((sc) => {
                   return (
                     <g key={sc.subnetId} className="transition-all duration-200">
-                      <title>{`Subnet: ${sc.label} (${sc.cidr})\nHosts: ${sc.hostCount}`}</title>
+                      <title>{`Subnet CIDR: ${sc.cidr}\nHosts: ${sc.hostCount}`}</title>
                       {/* Container Background Box */}
                       <rect
                         x={sc.x}
@@ -536,10 +579,10 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                         width={sc.width}
                         height={sc.height}
                         rx="10"
-                        fill="#0b1329"
+                        fill="#0a1224"
                         stroke="#1e293b"
                         strokeWidth="1.5"
-                        className="transition hover:border-blue-500/40"
+                        className="transition hover:border-slate-700"
                       />
 
                       {/* Container Header Bar */}
@@ -547,33 +590,42 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                         x={sc.x}
                         y={sc.y}
                         width={sc.width}
-                        height="44"
+                        height="46"
                         rx="10"
-                        fill="#0f1d40"
+                        fill="#0f1d3d"
                         stroke="#1e3a8a"
                         strokeWidth="1"
                       />
                       {/* Square off bottom corners of header */}
                       <rect
                         x={sc.x}
-                        y={sc.y + 30}
+                        y={sc.y + 32}
                         width={sc.width}
                         height="14"
-                        fill="#0f1d40"
+                        fill="#0f1d3d"
+                      />
+                      <line
+                        x1={sc.x}
+                        y1={sc.y + 46}
+                        x2={sc.x + sc.width}
+                        y2={sc.y + 46}
+                        stroke="#1e3a8a"
+                        strokeWidth="1"
+                        opacity="0.8"
                       />
 
-                      {/* Subnet Icon */}
-                      <g transform={`translate(${sc.x + 14}, ${sc.y + 14})`}>
-                        <rect x="0" y="0" width="16" height="16" rx="3" fill="#2563eb" />
-                        <path d="M 4 8 L 12 8 M 8 4 L 8 12" stroke="#ffffff" strokeWidth="1.5" />
+                      {/* Subnet Icon Box */}
+                      <g transform={`translate(${sc.x + 14}, ${sc.y + 13})`}>
+                        <rect x="0" y="0" width="20" height="20" rx="4" fill="#1d4ed8" fillOpacity="0.3" stroke="#3b82f6" strokeWidth="1" />
+                        <path d="M 5 10 L 15 10 M 10 5 L 10 15" stroke="#60a5fa" strokeWidth="1.5" strokeLinecap="round" />
                       </g>
 
-                      {/* Header Title */}
+                      {/* Monospace CIDR Title */}
                       <text
-                        x={sc.x + 38}
-                        y={sc.y + 26}
+                        x={sc.x + 42}
+                        y={sc.y + 27}
                         fill="#93c5fd"
-                        fontSize="12"
+                        fontSize="12.5"
                         fontFamily="monospace"
                         fontWeight="bold"
                         className="select-none"
@@ -581,38 +633,65 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                         {sc.cidr}
                       </text>
 
-                      {/* Host count badge */}
-                      <text
-                        x={sc.x + sc.width - 55}
-                        y={sc.y + 26}
-                        fill="#64748b"
-                        fontSize="10"
-                        fontFamily="monospace"
-                        textAnchor="end"
-                        className="select-none font-medium"
-                      >
-                        {sc.hostCount} {sc.hostCount === 1 ? 'host' : 'hosts'}
-                      </text>
+                      {/* Subnet Label / Name if different from CIDR */}
+                      {sc.label && !sc.label.includes(sc.cidr) && (
+                        <text
+                          x={sc.x + 42}
+                          y={sc.y + 39}
+                          fill="#64748b"
+                          fontSize="9.5"
+                          fontFamily="sans-serif"
+                          className="select-none"
+                        >
+                          {sc.label.length > 22 ? sc.label.slice(0, 20) + '...' : sc.label}
+                        </text>
+                      )}
+
+                      {/* Host count & services badge pill */}
+                      <g transform={`translate(${sc.x + sc.width - 65}, ${sc.y + 14})`}>
+                        <rect x="-65" y="0" width="90" height="18" rx="9" fill="#1e293b" fillOpacity="0.8" stroke="#334155" strokeWidth="1" />
+                        <text
+                          x="-20"
+                          y="12"
+                          fill="#94a3b8"
+                          fontSize="9.5"
+                          fontFamily="monospace"
+                          textAnchor="middle"
+                          className="select-none font-semibold"
+                        >
+                          {sc.hostCount} {sc.hostCount === 1 ? 'host' : 'hosts'}
+                        </text>
+                      </g>
 
                       {/* Collapse / Expand Toggle Button */}
                       <g
-                        transform={`translate(${sc.x + sc.width - 34}, ${sc.y + 12})`}
+                        transform={`translate(${sc.x + sc.width - 32}, ${sc.y + 13})`}
                         onClick={(ev) => {
                           ev.stopPropagation();
                           toggleSubnetCollapse(sc.subnetId);
                         }}
-                        className="cursor-pointer"
+                        className="cursor-pointer group/btn"
                       >
                         <title>{sc.isCollapsed ? 'Expand Subnet' : 'Collapse Subnet'}</title>
-                        <rect x="0" y="0" width="20" height="20" rx="4" fill="#1e293b" stroke="#334155" />
+                        <rect
+                          x="0"
+                          y="0"
+                          width="20"
+                          height="20"
+                          rx="4"
+                          fill="#1e293b"
+                          stroke="#334155"
+                          className="group-hover/btn:fill-blue-900 group-hover/btn:stroke-blue-500 transition"
+                        />
                         <text
                           x="10"
                           y="14"
                           fill="#cbd5e1"
-                          fontSize="12"
+                          fontSize="13"
                           fontFamily="monospace"
                           fontWeight="bold"
                           textAnchor="middle"
+                          className="select-none group-hover/btn:fill-white"
                         >
                           {sc.isCollapsed ? '+' : '−'}
                         </text>
@@ -630,7 +709,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                       width={layout.transitTier.width}
                       height={layout.transitTier.height}
                       rx="10"
-                      fill="#1e1035"
+                      fill="#120924"
                       stroke="#4c1d95"
                       strokeWidth="1.2"
                       strokeDasharray="6,4"
@@ -657,7 +736,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                       width={layout.unresolvedContainer.width}
                       height={layout.unresolvedContainer.height}
                       rx="10"
-                      fill="#18181b"
+                      fill="#111217"
                       stroke="#3f3f46"
                       strokeWidth="1.2"
                       strokeDasharray="5,4"
@@ -670,7 +749,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
-                      External & Unresolved
+                      External & Inferred Entities
                     </text>
                   </g>
                 )}
@@ -691,6 +770,8 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
                     const markerUrl = isSelected
                       ? 'url(#arrow-selected)'
+                      : isConnected
+                      ? 'url(#arrow-cyan)'
                       : re.strokeColor === '#06b6d4'
                       ? 'url(#arrow-cyan)'
                       : re.strokeColor === '#f59e0b'
@@ -708,7 +789,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                           onSelectNode(null);
                         }}
                         className="cursor-pointer group"
-                        opacity={isDimmed ? 0.2 : 1}
+                        opacity={isDimmed ? 0.12 : isSelected || isConnected ? 1 : 0.65}
                       >
                         <title>
                           {`Edge: ${re.sourceNodeId} -> ${re.targetNodeId}\nProtocol: ${re.protocol}\nPackets: ${re.edge.packet_count}\nBytes: ${re.edge.byte_count}`}
@@ -718,24 +799,24 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                           d={re.pathData}
                           fill="none"
                           stroke="transparent"
-                          strokeWidth={14}
+                          strokeWidth={16}
                         />
-                        {/* Glow for selected/connected edge */}
+                        {/* Soft glow halo for selected/connected edge */}
                         {(isSelected || isConnected) && (
                           <path
                             d={re.pathData}
                             fill="none"
                             stroke={isSelected ? '#60a5fa' : '#38bdf8'}
-                            strokeWidth={isSelected ? 5 : 4}
-                            opacity={0.4}
+                            strokeWidth={isSelected ? 6 : 4}
+                            opacity={0.35}
                           />
                         )}
-                        {/* Visible Line */}
+                        {/* Core visible connection line */}
                         <path
                           d={re.pathData}
                           fill="none"
-                          stroke={isSelected ? '#60a5fa' : re.strokeColor}
-                          strokeWidth={isSelected ? 3 : re.strokeWidth}
+                          stroke={isSelected ? '#60a5fa' : isConnected ? '#38bdf8' : re.strokeColor}
+                          strokeWidth={isSelected ? 3 : isConnected ? 2.5 : re.strokeWidth}
                           strokeDasharray={re.isDashed ? '5,4' : undefined}
                           markerEnd={markerUrl}
                           className="group-hover:stroke-blue-300 transition"
@@ -763,6 +844,14 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                     // If node is a Subnet root, skip rendering since container header already represents it
                     if (pn.node.node_type === 'SUBNET') return null;
 
+                    const primaryLabel = pn.node.label || pn.nodeId;
+                    const ipAddresses =
+                      (pn.node.properties?.ip_addresses as string[]) || pn.node.ip_addresses || [];
+                    const macAddresses =
+                      (pn.node.properties?.mac_addresses as string[]) || pn.node.mac_addresses || [];
+                    const secondaryLabel =
+                      macAddresses[0] || ipAddresses[0] || 'Host Endpoint';
+
                     return (
                       <g
                         key={pn.nodeId}
@@ -775,7 +864,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                         onMouseEnter={() => setHoveredNodeId(pn.nodeId)}
                         onMouseLeave={() => setHoveredNodeId(null)}
                         className="cursor-pointer group"
-                        opacity={isDimmed ? 0.25 : 1}
+                        opacity={isDimmed ? 0.2 : 1}
                       >
                         <title>
                           {`Node: ${pn.node.label}\nType: ${pn.node.node_type}\nID: ${pn.nodeId}`}
@@ -805,34 +894,37 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                               width={pn.box.width}
                               height={pn.box.height}
                               rx="8"
-                              fill="#2e1065"
-                              stroke={isSelected ? '#c084fc' : '#7e22ce'}
-                              strokeWidth={isSelected ? '2.5' : '1.5'}
-                              className="group-hover:stroke-purple-300 transition"
+                              fill="#180e29"
+                              stroke={isSelected ? '#c084fc' : isConnected ? '#a855f7' : isHovered ? '#7e22ce' : '#4c1d95'}
+                              strokeWidth={isSelected ? '2.5' : isConnected ? '1.8' : '1.2'}
+                              className="transition"
                             />
-                            {/* Router Icon */}
-                            <g transform="translate(10, 14)">
-                              <rect x="0" y="0" width="20" height="20" rx="4" fill="#6b21a8" />
-                              <polygon points="5,15 15,15 10,5" fill="#f3e8ff" />
+                            {/* Router Gateway Icon */}
+                            <g transform="translate(10, 12)">
+                              <rect x="0" y="0" width="24" height="24" rx="5" fill="#2e1065" stroke="#6b21a8" strokeWidth="1" />
+                              <polygon points="12,5 19,12 12,19 5,12" fill="none" stroke="#e9d5ff" strokeWidth="1.5" />
+                              <circle cx="12" cy="12" r="2" fill="#c084fc" />
                             </g>
                             <text
-                              x="38"
-                              y="24"
+                              x="42"
+                              y="23"
                               fill="#f3e8ff"
-                              fontSize="11"
+                              fontSize="11.5"
                               fontFamily="monospace"
                               fontWeight="bold"
+                              className="select-none"
                             >
-                              {pn.node.label.length > 18 ? pn.node.label.slice(0, 16) + '..' : pn.node.label}
+                              {primaryLabel.length > 18 ? primaryLabel.slice(0, 16) + '..' : primaryLabel}
                             </text>
                             <text
-                              x="38"
-                              y="42"
+                              x="42"
+                              y="37"
                               fill="#c084fc"
-                              fontSize="9"
+                              fontSize="9.5"
                               fontFamily="monospace"
+                              className="select-none"
                             >
-                              {((pn.node.properties?.ip_addresses as string[]) || pn.node.ip_addresses || [])[0] || 'Default Gateway'}
+                              {ipAddresses[0] || 'Default Gateway'}
                             </text>
                           </g>
                         ) : pn.node.node_type === 'SERVICE' ? (
@@ -844,20 +936,21 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                               width={pn.box.width}
                               height={pn.box.height}
                               rx="4"
-                              fill="#451a03"
-                              stroke={isSelected ? '#fde047' : '#b45309'}
+                              fill="#1c1103"
+                              stroke={isSelected ? '#fde047' : isHovered ? '#d97706' : '#78350f'}
                               strokeWidth={isSelected ? '2' : '1'}
-                              className="group-hover:stroke-amber-400 transition"
+                              className="transition"
                             />
                             <text
                               x="8"
-                              y="16"
-                              fill="#fde68a"
+                              y="15"
+                              fill="#fef08a"
                               fontSize="10"
                               fontFamily="monospace"
                               fontWeight="semibold"
+                              className="select-none"
                             >
-                              {pn.node.label.length > 22 ? pn.node.label.slice(0, 20) + '..' : pn.node.label}
+                              {primaryLabel.length > 22 ? primaryLabel.slice(0, 20) + '..' : primaryLabel}
                             </text>
                           </g>
                         ) : (
@@ -869,16 +962,35 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                               width={pn.box.width}
                               height={pn.box.height}
                               rx="8"
-                              fill="#031f18"
-                              stroke={isSelected ? '#34d399' : isConnected ? '#10b981' : '#065f46'}
-                              strokeWidth={isSelected ? '2.5' : '1.2'}
-                              className="group-hover:stroke-emerald-400 transition"
+                              fill="#0f172a"
+                              stroke={
+                                isSelected
+                                  ? '#3b82f6'
+                                  : isConnected
+                                  ? '#10b981'
+                                  : isHovered
+                                  ? '#334155'
+                                  : '#1e293b'
+                              }
+                              strokeWidth={isSelected ? '2.5' : isConnected ? '1.8' : '1.2'}
+                              className="transition"
                             />
-                            {/* Status indicator dot */}
+                            {/* Device Icon Tile */}
+                            <rect
+                              x="10"
+                              y="12"
+                              width="24"
+                              height="24"
+                              rx="5"
+                              fill="#1e293b"
+                              stroke="#334155"
+                              strokeWidth="1"
+                            />
+                            {/* Status dot in corner of icon tile */}
                             <circle
-                              cx="14"
-                              cy="22"
-                              r="4.5"
+                              cx="31"
+                              cy="15"
+                              r="3.5"
                               fill={
                                 pn.node.properties?.identity_status === 'CONFIRMED'
                                   ? '#10b981'
@@ -886,30 +998,40 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                                   ? '#06b6d4'
                                   : '#f59e0b'
                               }
+                              stroke="#0f172a"
+                              strokeWidth="1.5"
                             />
-                            {/* Primary Label (IP or Hostname) */}
+                            {/* Server / Device glyph inside icon box */}
+                            <path
+                              d="M 15 19 L 29 19 M 15 24 L 29 24 M 15 29 L 29 29"
+                              stroke="#94a3b8"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+
+                            {/* Primary Label */}
                             <text
-                              x="26"
-                              y="26"
-                              fill="#ecfdf5"
-                              fontSize="11"
+                              x="42"
+                              y="23"
+                              fill="#f8fafc"
+                              fontSize="11.5"
                               fontFamily="monospace"
                               fontWeight="bold"
+                              className="select-none"
                             >
-                              {pn.node.label.length > 18 ? pn.node.label.slice(0, 16) + '..' : pn.node.label}
+                              {primaryLabel.length > 17 ? primaryLabel.slice(0, 15) + '..' : primaryLabel}
                             </text>
-                            {/* Secondary Label (MAC or Secondary IP) */}
+
+                            {/* Secondary Label */}
                             <text
-                              x="26"
-                              y="44"
-                              fill="#6ee7b7"
-                              fontSize="9"
+                              x="42"
+                              y="37"
+                              fill="#94a3b8"
+                              fontSize="9.5"
                               fontFamily="monospace"
-                              opacity="0.8"
+                              className="select-none"
                             >
-                              {((pn.node.properties?.mac_addresses as string[]) || pn.node.mac_addresses || [])[0] ||
-                                ((pn.node.properties?.ip_addresses as string[]) || pn.node.ip_addresses || [])[0] ||
-                                'Host Endpoint'}
+                              {secondaryLabel.length > 20 ? secondaryLabel.slice(0, 18) + '..' : secondaryLabel}
                             </text>
                           </g>
                         )}
@@ -919,19 +1041,19 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
               </g>
             </svg>
           ) : (
-            <div className="text-gray-500 text-xs">
+            <div className="text-slate-500 text-xs">
               No topology graph elements available. Run capture analysis or import configurations to reconstruct the graph.
             </div>
           )}
         </div>
 
         {/* Comprehensive Detail Inspector Panel */}
-        <div className="bg-surface/50 border border-gray-800 rounded-lg p-4 space-y-4 shadow-sm">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-4 shadow-sm flex flex-col">
           {selectedNode ? (
             <div>
-              <div className="flex items-start justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-start justify-between border-b border-slate-800 pb-3">
                 <div>
-                  <div className="text-[10px] uppercase font-mono text-gray-400">Topology Node</div>
+                  <div className="text-[10px] uppercase font-mono text-slate-400">Topology Node</div>
                   <h4 className="text-sm font-bold text-white font-mono mt-0.5 break-all">{selectedNode.label}</h4>
                 </div>
                 <div className="flex items-center gap-2">
@@ -939,7 +1061,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                   <button
                     onClick={() => onSelectNode(null)}
                     title="Close Inspector & Return to Full Graph"
-                    className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition"
+                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -948,23 +1070,23 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
               <div className="mt-3 space-y-3 text-xs">
                 <div>
-                  <span className="text-gray-400 font-medium">Type:</span>{' '}
+                  <span className="text-slate-400 font-medium">Type:</span>{' '}
                   <span className="font-mono text-indigo-400 uppercase font-semibold">
                     {selectedNode.node_type}
                   </span>
                 </div>
 
                 <div>
-                  <span className="text-gray-400 font-medium">Node ID:</span>{' '}
-                  <span className="font-mono text-gray-300 break-all">{selectedNode.node_id || selectedNode.id}</span>
+                  <span className="text-slate-400 font-medium">Node ID:</span>{' '}
+                  <span className="font-mono text-slate-300 break-all">{selectedNode.node_id || selectedNode.id}</span>
                 </div>
 
                 {((selectedNode.properties?.ip_addresses as string[]) || selectedNode.ip_addresses || []).length > 0 && (
                   <div>
-                    <div className="text-gray-400 font-medium mb-1">IP Addresses:</div>
+                    <div className="text-slate-400 font-medium mb-1">IP Addresses:</div>
                     <div className="flex flex-wrap gap-1 font-mono">
                       {((selectedNode.properties?.ip_addresses as string[]) || selectedNode.ip_addresses || []).map((ip) => (
-                        <span key={ip} className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-200 text-[10px]">
+                        <span key={ip} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 text-[10px]">
                           {ip}
                         </span>
                       ))}
@@ -974,7 +1096,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
                 {(selectedNode.properties?.cidr_prefix || selectedNode.subnet_cidr) && (
                   <div>
-                    <span className="text-gray-400 font-medium">Subnet CIDR:</span>{' '}
+                    <span className="text-slate-400 font-medium">Subnet CIDR:</span>{' '}
                     <span className="font-mono text-cyan-400">
                       {String(selectedNode.properties?.cidr_prefix || selectedNode.subnet_cidr)}
                     </span>
@@ -983,7 +1105,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
                 {(selectedNode.properties?.port || selectedNode.service_port) && (
                   <div>
-                    <span className="text-gray-400 font-medium">Service Port:</span>{' '}
+                    <span className="text-slate-400 font-medium">Service Port:</span>{' '}
                     <span className="font-mono text-amber-400">
                       {String(selectedNode.properties?.port || selectedNode.service_port)}
                     </span>
@@ -992,21 +1114,21 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
                 {((selectedNode.properties?.mac_addresses as string[]) || selectedNode.mac_addresses || []).length > 0 && (
                   <div>
-                    <span className="text-gray-400 font-medium">MACs:</span>{' '}
-                    <span className="font-mono text-gray-400">
+                    <span className="text-slate-400 font-medium">MACs:</span>{' '}
+                    <span className="font-mono text-slate-400">
                       {((selectedNode.properties?.mac_addresses as string[]) || selectedNode.mac_addresses || []).join(', ')}
                     </span>
                   </div>
                 )}
 
-                <div className="pt-2 border-t border-gray-800">
-                  <div className="text-gray-400 font-medium mb-1">Adjacent Relationships:</div>
+                <div className="pt-2 border-t border-slate-800">
+                  <div className="text-slate-400 font-medium mb-1">Adjacent Relationships:</div>
                   {(topology?.edges || []).filter(
                     (e) =>
                       e.source_node_id === (selectedNode.node_id || selectedNode.id) ||
                       e.target_node_id === (selectedNode.node_id || selectedNode.id)
                   ).length === 0 ? (
-                    <div className="text-gray-500 italic text-[11px]">No adjacent graph edges.</div>
+                    <div className="text-slate-500 italic text-[11px]">No adjacent graph edges.</div>
                   ) : (
                     <div className="space-y-1 max-h-44 overflow-y-auto font-mono text-[10px]">
                       {(topology?.edges || [])
@@ -1022,9 +1144,9 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                               onSelectEdge(e);
                               onSelectNode(null);
                             }}
-                            className="p-1.5 bg-gray-900 border border-gray-800 hover:border-gray-700 rounded flex items-center justify-between cursor-pointer transition"
+                            className="p-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded flex items-center justify-between cursor-pointer transition"
                           >
-                            <span className="text-gray-300">{e.edge_type}</span>
+                            <span className="text-slate-300">{e.edge_type}</span>
                             {renderBadge(e.evidence_class)}
                           </div>
                         ))}
@@ -1032,11 +1154,37 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-gray-800">
+                {/* Collapsible Technical Metadata */}
+                {selectedNode.properties && Object.keys(selectedNode.properties).length > 0 && (
+                  <div className="pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setShowRawProperties((p) => !p)}
+                      className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-200 transition font-mono"
+                    >
+                      {showRawProperties ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      <span>Technical Properties</span>
+                    </button>
+                    {showRawProperties && (
+                      <div className="mt-1.5 p-2 rounded bg-slate-950 border border-slate-800 font-mono text-[10px] space-y-1 max-h-36 overflow-y-auto">
+                        {Object.entries(selectedNode.properties).map(([k, v]) => (
+                          <div key={k} className="flex justify-between gap-2">
+                            <span className="text-slate-400 truncate">{k}:</span>
+                            <span className="text-slate-200 text-right truncate">
+                              {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="pt-3 border-t border-slate-800">
                   <button
                     type="button"
                     onClick={() => onSelectNode(null)}
-                    className="w-full py-1.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white rounded text-xs font-mono transition text-center"
+                    className="w-full py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded text-xs font-mono transition text-center"
                   >
                     Return to Full Graph
                   </button>
@@ -1045,9 +1193,9 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
             </div>
           ) : selectedEdge ? (
             <div>
-              <div className="flex items-start justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-start justify-between border-b border-slate-800 pb-3">
                 <div>
-                  <div className="text-[10px] uppercase font-mono text-gray-400">Topology Edge</div>
+                  <div className="text-[10px] uppercase font-mono text-slate-400">Topology Edge</div>
                   <h4 className="text-sm font-bold text-white font-mono mt-0.5">{selectedEdge.edge_type}</h4>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1055,7 +1203,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                   <button
                     onClick={() => onSelectEdge(null)}
                     title="Close Inspector & Return to Full Graph"
-                    className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition"
+                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1064,44 +1212,49 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
               <div className="mt-3 space-y-3 text-xs">
                 <div>
-                  <span className="text-gray-400 font-medium">Edge ID:</span>{' '}
-                  <span className="font-mono text-gray-300 break-all">{selectedEdge.edge_id || selectedEdge.id}</span>
+                  <span className="text-slate-400 font-medium">Edge ID:</span>{' '}
+                  <span className="font-mono text-slate-300 break-all">{selectedEdge.edge_id || selectedEdge.id}</span>
+                </div>
+
+                <div className="space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Source:</span>
+                    <span className="font-mono text-cyan-400 font-semibold truncate max-w-[150px]">
+                      {selectedEdge.source_node_id}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Target:</span>
+                    <span className="font-mono text-emerald-400 font-semibold truncate max-w-[150px]">
+                      {selectedEdge.target_node_id}
+                    </span>
+                  </div>
                 </div>
 
                 <div>
-                  <span className="text-gray-400 font-medium">Source:</span>{' '}
-                  <span className="font-mono text-cyan-400 break-all">{selectedEdge.source_node_id}</span>
-                </div>
-
-                <div>
-                  <span className="text-gray-400 font-medium">Target:</span>{' '}
-                  <span className="font-mono text-emerald-400 break-all">{selectedEdge.target_node_id}</span>
-                </div>
-
-                <div>
-                  <span className="text-gray-400 font-medium">Protocol:</span>{' '}
+                  <span className="text-slate-400 font-medium">Protocol:</span>{' '}
                   <span className="font-mono text-amber-400">
                     {selectedEdge.primary_protocol || selectedEdge.protocol || 'IP'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div className="p-2 bg-gray-900/80 rounded border border-gray-800">
-                    <div className="text-[10px] text-gray-400">Packets</div>
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Packets</div>
                     <div className="font-mono font-bold text-white">{selectedEdge.packet_count}</div>
                   </div>
-                  <div className="p-2 bg-gray-900/80 rounded border border-gray-800">
-                    <div className="text-[10px] text-gray-400">Bytes</div>
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Bytes</div>
                     <div className="font-mono font-bold text-white">{selectedEdge.byte_count}</div>
                   </div>
                 </div>
 
                 {(selectedEdge.evidence_ids || []).length > 0 && (
-                  <div className="pt-2 border-t border-gray-800">
-                    <div className="text-gray-400 font-medium mb-1">Backing Evidence IDs:</div>
+                  <div className="pt-2 border-t border-slate-800">
+                    <div className="text-slate-400 font-medium mb-1">Backing Evidence IDs:</div>
                     <div className="space-y-1 max-h-32 overflow-y-auto font-mono text-[10px]">
                       {(selectedEdge.evidence_ids || []).map((eid: string) => (
-                        <div key={eid} className="p-1 rounded bg-gray-900 border border-gray-800 text-indigo-300">
+                        <div key={eid} className="p-1 rounded bg-slate-950 border border-slate-800 text-indigo-300">
                           {eid}
                         </div>
                       ))}
@@ -1109,11 +1262,11 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                   </div>
                 )}
 
-                <div className="pt-3 border-t border-gray-800">
+                <div className="pt-3 border-t border-slate-800">
                   <button
                     type="button"
                     onClick={() => onSelectEdge(null)}
-                    className="w-full py-1.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white rounded text-xs font-mono transition text-center"
+                    className="w-full py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded text-xs font-mono transition text-center"
                   >
                     Return to Full Graph
                   </button>
@@ -1121,12 +1274,65 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
               </div>
             </div>
           ) : (
-            <div className="py-14 text-center text-gray-500 text-xs">
-              <Layers className="w-8 h-8 mx-auto text-gray-600 mb-2" />
-              <div className="text-gray-300 font-medium mb-1">Topology Inspector</div>
-              <p className="text-gray-500 text-[11px] max-w-xs mx-auto leading-relaxed">
-                Click any subnet, router, asset, or edge in the graph to inspect detailed attributes, addressing, flow metrics, and evidence provenance.
-              </p>
+            /* Attractive Onboarding & Digital Twin Overview Card */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded bg-indigo-950/80 border border-indigo-800/60 text-indigo-400">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-white font-mono">Topology Inspector</span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+                  Ready
+                </span>
+              </div>
+
+              {/* Digital Twin Summary Stats */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Known Subnets</div>
+                  <div className="text-base font-bold font-mono text-cyan-400 mt-0.5">{subnetCount}</div>
+                </div>
+                <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Transit Routers</div>
+                  <div className="text-base font-bold font-mono text-purple-400 mt-0.5">{routerCount}</div>
+                </div>
+                <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Host Assets</div>
+                  <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">{assetCount}</div>
+                </div>
+                <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800">
+                  <div className="text-[10px] text-slate-400">Discovered Services</div>
+                  <div className="text-base font-bold font-mono text-amber-400 mt-0.5">{serviceCount}</div>
+                </div>
+                <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 col-span-2">
+                  <div className="text-[10px] text-slate-400">Observed Flows</div>
+                  <div className="text-base font-bold font-mono text-indigo-400 mt-0.5">{flowCount}</div>
+                </div>
+              </div>
+
+              {/* Helpful Interaction Guide */}
+              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 space-y-2 text-[11px] text-slate-400">
+                <div className="font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Interaction Guide</span>
+                </div>
+                <ul className="space-y-1.5 pl-1 leading-relaxed">
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-indigo-400 font-bold">•</span>
+                    <span>Click any device card to inspect identity, interfaces, and active communication flows.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-indigo-400 font-bold">•</span>
+                    <span>Click any communication edge to view transport protocol, packet count, and evidence provenance.</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-indigo-400 font-bold">•</span>
+                    <span>Use the search bar or type filters to highlight specific CIDRs, IPs, or services.</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           )}
         </div>

@@ -438,4 +438,97 @@ describe('TopologyGraphView Component', () => {
     fireEvent.click(screen.getByText('Return to Full Graph'));
     expect(onSelectNode).toHaveBeenCalledWith(null);
   });
+
+  it('calculates fit-to-view bounds enclosing all containers with proper padding', () => {
+    const layout = computeHierarchicalLayout(mockTopology);
+    expect(layout.bounds).toBeDefined();
+
+    const minContainerX = Math.min(...layout.subnetContainers.map((s) => s.x));
+    const maxContainerX = Math.max(...layout.subnetContainers.map((s) => s.x + s.width));
+    expect(layout.bounds.minX).toBeLessThan(minContainerX);
+    expect(layout.bounds.maxX).toBeGreaterThan(maxContainerX);
+
+    if (layout.transitTier) {
+      expect(layout.bounds.minY).toBeLessThan(layout.transitTier.y);
+    }
+  });
+
+  it('updates zoom percentage consistently on zoom in, zoom out, and reset', () => {
+    render(
+      <TopologyGraphView
+        topology={mockTopology}
+        selectedNode={null}
+        selectedEdge={null}
+        onSelectNode={vi.fn()}
+        onSelectEdge={vi.fn()}
+        evidenceClassFilter="ALL"
+        onChangeEvidenceFilter={vi.fn()}
+      />
+    );
+
+    // Initial default zoom is 100%
+    expect(screen.getByText('100%')).toBeInTheDocument();
+
+    // Zoom In
+    const zoomInBtn = screen.getByTitle(/Zoom In/i);
+    fireEvent.click(zoomInBtn);
+    expect(screen.getByText('115%')).toBeInTheDocument();
+
+    // Zoom Out
+    const zoomOutBtn = screen.getByTitle(/Zoom Out/i);
+    fireEvent.click(zoomOutBtn);
+    fireEvent.click(zoomOutBtn);
+    expect(screen.getByText('85%')).toBeInTheDocument();
+
+    // Reset View button
+    const resetBtn = screen.getByTitle(/Reset View & All Filters/i);
+    fireEvent.click(resetBtn);
+    expect(screen.getByText('100%')).toBeInTheDocument();
+  });
+
+  it('renders rich edge details when an edge is selected', () => {
+    const onSelectEdge = vi.fn();
+    const testEdge = mockTopology.edges[0] ?? null;
+
+    render(
+      <TopologyGraphView
+        topology={mockTopology}
+        selectedNode={null}
+        selectedEdge={testEdge}
+        onSelectNode={vi.fn()}
+        onSelectEdge={onSelectEdge}
+        evidenceClassFilter="ALL"
+        onChangeEvidenceFilter={vi.fn()}
+      />
+    );
+
+    // Inspector shows Edge details
+    expect(screen.getByText(/Topology Edge/i)).toBeInTheDocument();
+    expect(screen.getByText('host-db')).toBeInTheDocument();
+    expect(screen.getByText('sub-internal')).toBeInTheDocument();
+
+    // Click Return to Full Graph
+    fireEvent.click(screen.getByText('Return to Full Graph'));
+    expect(onSelectEdge).toHaveBeenCalledWith(null);
+  });
+
+  it('renders rich empty onboarding state with summary metrics and interaction guide when nothing is selected', () => {
+    render(
+      <TopologyGraphView
+        topology={mockTopology}
+        selectedNode={null}
+        selectedEdge={null}
+        onSelectNode={vi.fn()}
+        onSelectEdge={vi.fn()}
+        evidenceClassFilter="ALL"
+        onChangeEvidenceFilter={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Topology Inspector/i)).toBeInTheDocument();
+    expect(screen.getByText('Known Subnets')).toBeInTheDocument();
+    expect(screen.getByText('Host Assets')).toBeInTheDocument();
+    expect(screen.getByText('Discovered Services')).toBeInTheDocument();
+    expect(screen.getByText(/Interaction Guide/i)).toBeInTheDocument();
+  });
 });
