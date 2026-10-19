@@ -1548,6 +1548,17 @@ class MetadataStore:
                 return None
             return CounterfactualResult.model_validate_json(row["result_json"])
 
+    def get_counterfactual_result_by_scenario(self, scenario_id: str) -> CounterfactualResult | None:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT result_json FROM counterfactual_results WHERE scenario_id = ? ORDER BY executed_at DESC LIMIT 1;",
+                (scenario_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return CounterfactualResult.model_validate_json(row["result_json"])
+
     def save_invariant(self, invariant: SecurityInvariant) -> None:
         with self._get_connection() as conn:
             conn.execute(

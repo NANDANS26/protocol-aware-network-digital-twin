@@ -4,6 +4,7 @@ import pytest
 
 from network_twin.simulation.models import (
     AccessControlList,
+    CounterfactualResult,
     DefaultPolicy,
     FirewallRule,
     IPAddressAssignment,
@@ -250,3 +251,109 @@ def test_scenario_adds_route_making_destination_reachable(scenario_test_model: N
     assert diff.baseline_status == ReachabilityStatus.BLOCKED
     assert diff.counterfactual_status == ReachabilityStatus.REACHABLE
     assert diff.change_type == "NEWLY_REACHABLE"
+
+
+def test_scenario_resolves_firewall_alias_to_router(scenario_test_model: NetworkModel):
+    """Verifies that an action targeting 'firewall-1' gracefully resolves to router-1."""
+    engine = ScenarioEngine()
+    scenario = SimulationScenario(
+        scenario_id="scen-alias-test",
+        name="Emergency Lockdown",
+        description="Targeting firewall-1 which resolves to router-1",
+        base_model_id=scenario_test_model.model_id,
+        actions=[
+            SimulationAction(
+                action_type=SimulationActionType.ADD_FIREWALL_RULE,
+                target_node_id="firewall-1",
+                parameters={
+                    "rule_id": "rule-deny-https",
+                    "action": "DENY",
+                    "direction": "INGRESS",
+                    "protocol": "TCP",
+                    "destination_port": 443,
+                    "position": 0,
+                },
+            )
+        ],
+    )
+
+    test_query = ReachabilityQuery(
+        source_ip="10.0.1.10",
+        destination_ip="10.0.2.20",
+        protocol=TransportProtocolConstraint.TCP,
+        destination_port=443,
+    )
+
+    cf_model, result = engine.run_scenario(
+        scenario_test_model,
+        scenario,
+        test_queries=[test_query],
+    )
+
+    assert result.applied_actions_count == 1
+    assert result.newly_blocked_count == 1
+    assert result.result_id == result.run_id
+    assert len(result.path_differences) == 1
+    assert result.path_differences[0].change_type == "NEWLY_BLOCKED"
+
+
+def test_scenario_validation_catches_invalid_target_and_params(scenario_test_model: NetworkModel):
+    """Verifies pre-execution validation catches non-existent nodes and invalid parameters."""
+    engine = ScenarioEngine()
+    # 1. Non-existent host target
+    bad_scenario = SimulationScenario(
+        scenario_id="scen-bad-target",
+        name="Bad Target",
+        base_model_id=scenario_test_model.model_id,
+        actions=[
+            SimulationAction(
+                action_type=SimulationActionType.ADD_ROUTE,
+                target_node_id="non-existent-device-xyz",
+                parameters={"destination_prefix": "10.99.0.0/24"},
+            )
+        ],
+    )
+    errors = engine.validate_scenario(scenario_test_model, bad_scenario)
+    assert len(errors) == 1
+    assert "not found in model" in errors[0]
+
+    # 2. Invalid CIDR parameter
+    bad_param_scenario = SimulationScenario(
+        scenario_id="scen-bad-cidr",
+        name="Bad CIDR",
+        base_model_id=scenario_test_model.model_id,
+        actions=[
+            SimulationAction(
+                action_type=SimulationActionType.ADD_ROUTE,
+                target_node_id="router-1",
+                parameters={"destination_prefix": "999.999.999.999/99"},
+            )
+        ],
+    )
+    errors = engine.validate_scenario(scenario_test_model, bad_param_scenario)
+    assert len(errors) == 1
+    assert "Invalid CIDR prefix" in errors[0]
+
+
+def test_counterfactual_result_contract_compatibility():
+    """Verifies CounterfactualResult synchronizes dual frontend and backend fields."""
+    res = CounterfactualResult(
+        run_id="run-12345",
+        scenario_id="scen-123",
+        scenario_name="Test Scenario",
+        base_model_id="model-base",
+        baseline_fingerprint="fp-base",
+        counterfactual_model_id="model-cf",
+        counterfactual_fingerprint="fp-cf",
+        applied_actions_count=1,
+        newly_reachable_count=2,
+        newly_blocked_count=3,
+        invariant_regressions_count=1,
+        summary_explanation="Test summary",
+    )
+    assert res.result_id == "run-12345"
+    assert res.newly_reachable_paths_count == 2
+    assert res.newly_blocked_paths_count == 3
+    assert res.security_regressions_count == 1
+    assert res.created_at_iso == res.executed_at_iso
+

@@ -56,12 +56,22 @@ export class NetworkTwinApiClient {
           errorData = { message: response.statusText };
         }
 
+        let message = errorData.message;
+        if (!message && typeof errorData.detail === 'string') {
+          message = errorData.detail;
+        } else if (!message && errorData.detail && typeof errorData.detail === 'object') {
+          message = JSON.stringify(errorData.detail);
+        }
+        if (!message) {
+          message = `HTTP ${response.status}: ${response.statusText}`;
+        }
+
         const apiError: ApiError = {
-          error: errorData.error || 'RequestFailed',
-          message: errorData.message || `HTTP ${response.status}: ${response.statusText}`,
+          error: errorData.error || (errorData.detail ? 'ValidationError' : 'RequestFailed'),
+          message,
           statusCode: response.status,
           requestId: errorData.request_id || requestId,
-          details: errorData.details,
+          details: errorData.details || errorData.detail,
         };
         throw apiError;
       }

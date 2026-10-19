@@ -167,6 +167,13 @@ async def create_scenario(
             detail=f"Base NetworkModel '{scenario.base_model_id}' not found.",
         )
 
+    validation_errors = ScenarioEngine.validate_scenario(base_model, scenario)
+    if validation_errors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scenario validation failed: {'; '.join(validation_errors)}",
+        )
+
     store.save_scenario(scenario)
     return scenario
 
@@ -188,6 +195,21 @@ async def get_scenario(scenario_id: str, store: MetadataStore = Depends(get_meta
     return scenario
 
 
+@router.get("/simulations/scenarios/{scenario_id}/result", response_model=CounterfactualResult)
+async def get_scenario_result(
+    scenario_id: str,
+    store: MetadataStore = Depends(get_metadata_store),
+):
+    """Retrieves the latest counterfactual execution result for a given scenario."""
+    result = store.get_counterfactual_result_by_scenario(scenario_id)
+    if not result:
+        # Also check if scenario_id was passed as run_id
+        result = store.get_counterfactual_result(scenario_id)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No execution result found for scenario '{scenario_id}'.")
+    return result
+
+
 @router.post("/simulations/scenarios/{scenario_id}/run", response_model=CounterfactualResult)
 async def run_scenario(
     scenario_id: str,
@@ -204,6 +226,13 @@ async def run_scenario(
         raise HTTPException(
             status_code=404,
             detail=f"Base model '{scenario.base_model_id}' for scenario not found.",
+        )
+
+    validation_errors = scenario_engine.validate_scenario(base_model, scenario)
+    if validation_errors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scenario validation failed: {'; '.join(validation_errors)}",
         )
 
     invariants = store.list_invariants()

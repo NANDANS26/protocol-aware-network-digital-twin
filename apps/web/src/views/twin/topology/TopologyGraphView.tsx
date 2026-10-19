@@ -49,6 +49,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 }) => {
   // Canvas viewport & transform state
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
@@ -259,11 +260,22 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
   const handleMouseUp = () => setIsPanning(false);
 
-  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.1 : -0.1;
-    setZoomLevel((z) => Math.min(3.0, Math.max(0.25, Number((z + delta).toFixed(2)))));
-  };
+  // Attach non-passive wheel event listener directly to SVG to prevent passive listener warning
+  useEffect(() => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+
+    const onWheelHandler = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      setZoomLevel((z) => Math.min(3.0, Math.max(0.25, Number((z + delta).toFixed(2)))));
+    };
+
+    svgEl.addEventListener('wheel', onWheelHandler, { passive: false });
+    return () => {
+      svgEl.removeEventListener('wheel', onWheelHandler);
+    };
+  }, []);
 
   // Node matching search query
   const matchingNodeIds = useMemo(() => {
@@ -527,12 +539,12 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
 
           {topology && (topology.nodes || []).length > 0 ? (
             <svg
+              ref={svgRef}
               className="w-full h-full select-none"
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              onWheel={handleWheel}
             >
               <defs>
                 {/* Arrowhead Markers */}

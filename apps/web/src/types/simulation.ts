@@ -274,20 +274,27 @@ export interface InvariantDifference {
 
 export interface CounterfactualResult {
   result_id: string;
+  run_id?: string;
   scenario_id: string;
-  scenario_name: string;
+  scenario_name?: string;
   base_model_id: string;
   baseline_fingerprint: string;
   counterfactual_model_id: string;
   counterfactual_fingerprint: string;
   applied_actions_count: number;
   path_differences: PathDifference[];
+  reachability_diffs?: PathDifference[];
   invariant_differences: InvariantDifference[];
+  invariant_diffs?: InvariantDifference[];
   newly_reachable_paths_count: number;
+  newly_reachable_count?: number;
   newly_blocked_paths_count: number;
+  newly_blocked_count?: number;
   security_regressions_count: number;
+  invariant_regressions_count?: number;
   summary_explanation: string;
   created_at_iso: string;
+  executed_at_iso?: string;
 }
 
 export interface BuildModelRequest {

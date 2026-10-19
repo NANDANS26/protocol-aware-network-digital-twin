@@ -20,6 +20,7 @@ from network_twin.simulation.models import (
     FilterStatefulness,
     FirewallRule,
     InvariantDifference,
+    InvariantSeverity,
     IPAddressAssignment,
     NetworkModel,
     PathDifference,
@@ -60,6 +61,10 @@ class ScenarioEngine:
         test_queries: list[ReachabilityQuery] | None = None,
     ) -> tuple[NetworkModel, CounterfactualResult]:
         """Runs hypothetical scenario in isolation, returning (counterfactual_model, result)."""
+        validation_errors = self.validate_scenario(base_model, scenario)
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
+
         run_id = f"run-{uuid.uuid4().hex[:12]}"
 
         # 1. Deep clone base model for total isolation
@@ -142,6 +147,7 @@ class ScenarioEngine:
                         InvariantDifference(
                             invariant_id=inv.invariant_id,
                             invariant_name=inv.name,
+                            severity=inv.severity,
                             baseline_status=b_res.status,
                             counterfactual_status=c_res.status,
                             explanation=exp,
@@ -157,6 +163,7 @@ class ScenarioEngine:
         result = CounterfactualResult(
             run_id=run_id,
             scenario_id=scenario.scenario_id,
+            scenario_name=scenario.name,
             base_model_id=base_model.model_id,
             baseline_fingerprint=base_model.fingerprint,
             counterfactual_model_id=cf_model.model_id,
@@ -174,6 +181,118 @@ class ScenarioEngine:
         logger.info("Scenario execution complete: %s", summary)
         return cf_model, result
 
+    @classmethod
+    def resolve_target_node(
+        cls,
+        model: NetworkModel,
+        target_node_id: str,
+        action_type: SimulationActionType | None = None,
+    ):
+        """Deterministically resolves a target node ID, alias, or role to a concrete ModelNode."""
+        if not target_node_id or not str(target_node_id).strip():
+            raise KeyError("Target node ID cannot be empty.")
+
+        tid = str(target_node_id).strip()
+
+        # 1. Exact match
+        if tid in model.nodes:
+            return model.nodes[tid]
+
+        # 2. Prefixed or stripped "node-" match
+        if f"node-{tid}" in model.nodes:
+            return model.nodes[f"node-{tid}"]
+        if tid.startswith("node-") and tid[5:] in model.nodes:
+            return model.nodes[tid[5:]]
+
+        # 3. Case-insensitive node_id or label match
+        tid_lower = tid.lower()
+        for node in model.nodes.values():
+            if node.node_id.lower() == tid_lower or (node.label and node.label.lower() == tid_lower):
+                return node
+
+        # 4. Partial / Substring label match (e.g. "Router: 192.168.1.1" matching "router")
+        for node in model.nodes.values():
+            if (node.label and tid_lower in node.label.lower()) or tid_lower in node.node_id.lower():
+                return node
+
+        # 5. Semantic Policy/Routing Role Alias Resolution (e.g. firewall-1, router-1, perimeter)
+        is_firewall_query = any(k in tid_lower for k in ("firewall", "fw", "perimeter", "filter"))
+        is_router_query = any(k in tid_lower for k in ("router", "gateway", "gw", "core"))
+
+        firewall_nodes = [n for n in model.nodes.values() if n.node_type.value == "FIREWALL"]
+        if is_firewall_query and firewall_nodes:
+            logger.info("Resolved target alias '%s' to FIREWALL node '%s' (%s)", tid, firewall_nodes[0].node_id, firewall_nodes[0].label)
+            return firewall_nodes[0]
+
+        router_nodes = [n for n in model.nodes.values() if n.node_type.value == "ROUTER"]
+        if router_nodes:
+            is_firewall_action = action_type in (
+                SimulationActionType.ADD_FIREWALL_RULE,
+                SimulationActionType.REMOVE_FIREWALL_RULE,
+                SimulationActionType.MODIFY_FIREWALL_RULE,
+                SimulationActionType.REORDER_FIREWALL_RULES,
+            ) if action_type else False
+
+            if is_firewall_query or is_router_query or is_firewall_action:
+                preferred = next((r for r in router_nodes if r.acls), router_nodes[0])
+                logger.info(
+                    "Resolved target alias '%s' to policy enforcement ROUTER node '%s' (%s)",
+                    tid,
+                    preferred.node_id,
+                    preferred.label,
+                )
+                return preferred
+
+        if firewall_nodes:
+            return firewall_nodes[0]
+
+        available = [f"{n.node_id} ({n.label}, {n.node_type.value})" for n in list(model.nodes.values())[:8]]
+        raise KeyError(
+            f"Target node '{target_node_id}' not found in model '{model.model_id}'. "
+            f"Available candidate nodes ({len(model.nodes)} total): {', '.join(available)}"
+        )
+
+    @classmethod
+    def validate_scenario(
+        cls,
+        model: NetworkModel,
+        scenario: SimulationScenario,
+    ) -> list[str]:
+        """Performs static pre-execution validation of scenario actions against a target model."""
+        errors: list[str] = []
+        if not scenario.actions:
+            errors.append("Scenario must specify at least one action.")
+
+        for idx, action in enumerate(scenario.actions, start=1):
+            try:
+                cls.resolve_target_node(model, action.target_node_id, action.action_type)
+            except KeyError as e:
+                errors.append(f"Action #{idx} ({action.action_type.value}): {e.args[0]}")
+                continue
+
+            params = action.parameters or {}
+            if action.action_type == SimulationActionType.ADD_ROUTE:
+                dest = params.get("destination_prefix")
+                if not dest:
+                    errors.append(f"Action #{idx} (ADD_ROUTE): 'destination_prefix' parameter is required.")
+                else:
+                    try:
+                        ipaddress.ip_network(dest, strict=False)
+                    except ValueError as ve:
+                        errors.append(f"Action #{idx} (ADD_ROUTE): Invalid CIDR prefix '{dest}': {ve}")
+            elif action.action_type == SimulationActionType.ADD_FIREWALL_RULE:
+                action_val = params.get("action", "DENY")
+                if action_val not in ("PERMIT", "DENY"):
+                    errors.append(f"Action #{idx} (ADD_FIREWALL_RULE): Invalid action '{action_val}'. Must be PERMIT or DENY.")
+                dir_val = params.get("direction", "INGRESS")
+                if dir_val not in ("INGRESS", "EGRESS"):
+                    errors.append(f"Action #{idx} (ADD_FIREWALL_RULE): Invalid direction '{dir_val}'. Must be INGRESS or EGRESS.")
+                port = params.get("destination_port")
+                if port is not None and not (isinstance(port, int) and 1 <= port <= 65535):
+                    errors.append(f"Action #{idx} (ADD_FIREWALL_RULE): Port must be an integer between 1 and 65535.")
+
+        return errors
+
     def _apply_action(
         self,
         model: NetworkModel,
@@ -181,11 +300,7 @@ class ScenarioEngine:
         action_index: int,
     ) -> None:
         """Applies a single simulation action deterministically with rigorous validation."""
-        target_node = model.nodes.get(action.target_node_id) or model.nodes.get(f"node-{action.target_node_id}")
-        if not target_node:
-            raise KeyError(
-                f"Action #{action_index} ({action.action_type.value}): Target node '{action.target_node_id}' not found in model."
-            )
+        target_node = self.resolve_target_node(model, action.target_node_id, action.action_type)
 
         params = action.parameters
 

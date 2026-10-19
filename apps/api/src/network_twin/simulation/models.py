@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AdministrativeState(StrEnum):
@@ -364,7 +364,7 @@ class SimulationAction(BaseModel):
 class SimulationScenario(BaseModel):
     scenario_id: str
     name: str
-    description: str
+    description: str = ""
     base_model_id: str
     actions: list[SimulationAction] = Field(default_factory=list)
     created_at_iso: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -384,6 +384,7 @@ class PathDifference(BaseModel):
 class InvariantDifference(BaseModel):
     invariant_id: str
     invariant_name: str
+    severity: InvariantSeverity = InvariantSeverity.HIGH
     baseline_status: InvariantStatus
     counterfactual_status: InvariantStatus
     explanation: str
@@ -392,6 +393,7 @@ class InvariantDifference(BaseModel):
 class CounterfactualResult(BaseModel):
     run_id: str
     scenario_id: str
+    scenario_name: str = ""
     base_model_id: str
     baseline_fingerprint: str
     counterfactual_model_id: str
@@ -404,3 +406,56 @@ class CounterfactualResult(BaseModel):
     invariant_regressions_count: int = 0
     summary_explanation: str
     executed_at_iso: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+    # Frontend contract compatibility fields
+    result_id: str = ""
+    path_differences: list[PathDifference] = Field(default_factory=list)
+    invariant_differences: list[InvariantDifference] = Field(default_factory=list)
+    newly_reachable_paths_count: int = 0
+    newly_blocked_paths_count: int = 0
+    security_regressions_count: int = 0
+    created_at_iso: str = ""
+
+    @model_validator(mode="after")
+    def sync_compatibility_fields(self) -> "CounterfactualResult":
+        # Sync run_id and result_id
+        if not self.result_id and self.run_id:
+            self.result_id = self.run_id
+        elif not self.run_id and self.result_id:
+            self.run_id = self.result_id
+
+        # Sync path differences
+        if not self.path_differences and self.reachability_diffs:
+            self.path_differences = self.reachability_diffs
+        elif not self.reachability_diffs and self.path_differences:
+            self.reachability_diffs = self.path_differences
+
+        # Sync invariant differences
+        if not self.invariant_differences and self.invariant_diffs:
+            self.invariant_differences = self.invariant_diffs
+        elif not self.invariant_diffs and self.invariant_differences:
+            self.invariant_diffs = self.invariant_differences
+
+        # Sync counts
+        if not self.newly_reachable_paths_count and self.newly_reachable_count:
+            self.newly_reachable_paths_count = self.newly_reachable_count
+        elif not self.newly_reachable_count and self.newly_reachable_paths_count:
+            self.newly_reachable_count = self.newly_reachable_paths_count
+
+        if not self.newly_blocked_paths_count and self.newly_blocked_count:
+            self.newly_blocked_paths_count = self.newly_blocked_count
+        elif not self.newly_blocked_count and self.newly_blocked_paths_count:
+            self.newly_blocked_count = self.newly_blocked_paths_count
+
+        if not self.security_regressions_count and self.invariant_regressions_count:
+            self.security_regressions_count = self.invariant_regressions_count
+        elif not self.invariant_regressions_count and self.security_regressions_count:
+            self.invariant_regressions_count = self.security_regressions_count
+
+        # Sync timestamp
+        if not self.created_at_iso and self.executed_at_iso:
+            self.created_at_iso = self.executed_at_iso
+        elif not self.executed_at_iso and self.created_at_iso:
+            self.executed_at_iso = self.created_at_iso
+
+        return self

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type {
   NetworkModel,
   SimulationScenario,
   CounterfactualResult,
   SimulationActionType,
+  ModelNode,
 } from '../../types/simulation';
 import {
   GitCompare,
@@ -50,6 +51,39 @@ export const CounterfactualScenarioView: React.FC<Props> = ({
   const [actionPrefix, setActionPrefix] = useState<string>('10.0.1.0/24');
 
   const selectedScenario = scenarios.find((s) => s.scenario_id === selectedScenarioId);
+  const selectedModel = useMemo(
+    () => models.find((m) => m.model_id === selectedModelId),
+    [models, selectedModelId]
+  );
+
+  const availableNodes: ModelNode[] = useMemo(() => {
+    if (!selectedModel || !selectedModel.nodes) return [];
+    const rawNodes = Array.isArray(selectedModel.nodes)
+      ? selectedModel.nodes
+      : Object.values(selectedModel.nodes);
+    return [...rawNodes].sort((a, b) => {
+      const typeRank = (t: string) => (t === 'FIREWALL' ? 0 : t === 'ROUTER' ? 1 : t === 'HOST' ? 2 : 3);
+      const diff = typeRank(a.node_type) - typeRank(b.node_type);
+      if (diff !== 0) return diff;
+      return (a.label || a.node_id).localeCompare(b.label || b.node_id);
+    });
+  }, [selectedModel]);
+
+  // Set intelligent default target node based on available nodes in the selected model
+  useEffect(() => {
+    if (availableNodes.length > 0) {
+      const exists = availableNodes.some((n) => n.node_id === targetNode);
+      if (!exists || targetNode === 'firewall-1') {
+        const preferred =
+          availableNodes.find((n) => n.node_type === 'FIREWALL') ||
+          availableNodes.find((n) => n.node_type === 'ROUTER') ||
+          availableNodes[0];
+        if (preferred) {
+          setTargetNode(preferred.node_id);
+        }
+      }
+    }
+  }, [availableNodes, targetNode]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,158 +211,186 @@ export const CounterfactualScenarioView: React.FC<Props> = ({
               Hypothetical Actions ({selectedScenario.actions.length})
             </span>
             <div className="space-y-1.5">
-              {selectedScenario.actions.map((act, idx) => (
-                <div key={idx} className="bg-slate-950 p-2 rounded border border-gray-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 font-bold text-[10px]">
-                      {act.action_type}
-                    </span>
-                    <span className="text-gray-300">Target Node: {act.target_node_id}</span>
+              {selectedScenario.actions.map((act, idx) => {
+                const targetMatch = availableNodes.find(
+                  (n) => n.node_id === act.target_node_id || n.label === act.target_node_id
+                );
+                return (
+                  <div key={idx} className="bg-slate-950 p-2 rounded border border-gray-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 font-bold text-[10px]">
+                        {act.action_type}
+                      </span>
+                      <span className="text-gray-300">
+                        Target Node: <span className="font-semibold text-white">{act.target_node_id}</span>
+                        {targetMatch && (
+                          <span className="ml-1 text-[11px] text-cyan-400">
+                            ({targetMatch.label || targetMatch.node_type})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <span className="text-gray-500 text-[11px]">{JSON.stringify(act.parameters)}</span>
                   </div>
-                  <span className="text-gray-500 text-[11px]">{JSON.stringify(act.parameters)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
       {/* Comparative Simulation Results Matrix */}
-      {counterfactualResult && (
-        <div className="space-y-4">
-          {/* Summary Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
-                Newly Reachable Paths
-              </span>
-              <span className="text-xl font-bold font-mono text-emerald-400 mt-1 block">
-                +{counterfactualResult.newly_reachable_paths_count}
-              </span>
+      {counterfactualResult && (() => {
+        const pathDiffs = counterfactualResult.path_differences || counterfactualResult.reachability_diffs || [];
+        const invariantDiffs = counterfactualResult.invariant_differences || counterfactualResult.invariant_diffs || [];
+        const newlyReachableCount = counterfactualResult.newly_reachable_paths_count ?? counterfactualResult.newly_reachable_count ?? 0;
+        const newlyBlockedCount = counterfactualResult.newly_blocked_paths_count ?? counterfactualResult.newly_blocked_count ?? 0;
+        const regressionsCount = counterfactualResult.security_regressions_count ?? counterfactualResult.invariant_regressions_count ?? 0;
+        const actionsCount = counterfactualResult.applied_actions_count ?? 0;
+
+        return (
+          <div className="space-y-4">
+            {/* Summary Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Newly Reachable Paths
+                </span>
+                <span className="text-xl font-bold font-mono text-emerald-400 mt-1 block">
+                  +{newlyReachableCount}
+                </span>
+              </div>
+
+              <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Newly Blocked Paths
+                </span>
+                <span className="text-xl font-bold font-mono text-rose-400 mt-1 block">
+                  +{newlyBlockedCount}
+                </span>
+              </div>
+
+              <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Security Regressions
+                </span>
+                <span
+                  className={`text-xl font-bold font-mono mt-1 block ${
+                    regressionsCount > 0 ? 'text-rose-400' : 'text-gray-400'
+                  }`}
+                >
+                  {regressionsCount}
+                </span>
+              </div>
+
+              <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Applied Actions
+                </span>
+                <span className="text-xl font-bold font-mono text-cyan-400 mt-1 block">
+                  {actionsCount}
+                </span>
+              </div>
             </div>
 
-            <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
-                Newly Blocked Paths
-              </span>
-              <span className="text-xl font-bold font-mono text-rose-400 mt-1 block">
-                +{counterfactualResult.newly_blocked_paths_count}
-              </span>
+            {/* Fingerprint delta */}
+            <div className="bg-surface/30 border border-gray-800 p-3 rounded-lg font-mono text-xs flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="text-gray-400 text-[10px] uppercase block">Baseline Fingerprint</span>
+                <span className="text-gray-200">{(counterfactualResult.baseline_fingerprint || '').slice(0, 16)}...</span>
+              </div>
+              <ArrowRight className="w-4 h-4 text-cyan-400" />
+              <div>
+                <span className="text-gray-400 text-[10px] uppercase block">Counterfactual Fingerprint</span>
+                <span className="text-cyan-300">{(counterfactualResult.counterfactual_fingerprint || '').slice(0, 16)}...</span>
+              </div>
             </div>
 
-            <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
-                Security Regressions
-              </span>
-              <span
-                className={`text-xl font-bold font-mono mt-1 block ${
-                  counterfactualResult.security_regressions_count > 0 ? 'text-rose-400' : 'text-gray-400'
-                }`}
-              >
-                {counterfactualResult.security_regressions_count}
-              </span>
-            </div>
+            {/* Path Differences Table */}
+            {pathDiffs.length > 0 && (
+              <div className="bg-surface/50 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="p-3 border-b border-gray-800 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Route className="w-3.5 h-3.5 text-indigo-400" />
+                    Path Reachability Status Shifts ({pathDiffs.length})
+                  </h3>
+                </div>
+                <div className="divide-y divide-gray-800 text-xs font-mono">
+                  {pathDiffs.map((diff, idx) => (
+                    <div key={idx} className="p-3 flex items-center justify-between hover:bg-slate-900/30">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-semibold">
+                          {diff.source_ip} &rarr; {diff.destination_ip}:{diff.destination_port || diff.protocol}
+                        </span>
+                        <span className="text-gray-400 text-[11px] font-normal">({diff.explanation})</span>
+                      </div>
 
-            <div className="bg-surface/50 border border-gray-800 p-3 rounded-lg">
-              <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider block">
-                Applied Actions
-              </span>
-              <span className="text-xl font-bold font-mono text-cyan-400 mt-1 block">
-                {counterfactualResult.applied_actions_count}
-              </span>
-            </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px]">
+                          {diff.baseline_status}
+                        </span>
+                        <ArrowRight className="w-3 h-3 text-gray-500" />
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            diff.change_type === 'NEWLY_REACHABLE'
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                              : 'bg-rose-950 text-rose-300 border border-rose-800'
+                          }`}
+                        >
+                          {diff.counterfactual_status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Invariant Differences Table */}
+            {invariantDiffs.length > 0 && (
+              <div className="bg-surface/50 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="p-3 border-b border-gray-800 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                    Security Invariant State Transitions ({invariantDiffs.length})
+                  </h3>
+                </div>
+                <div className="divide-y divide-gray-800 text-xs font-mono">
+                  {invariantDiffs.map((diff, idx) => (
+                    <div key={idx} className="p-3 flex items-center justify-between hover:bg-slate-900/30">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-semibold">{diff.invariant_name}</span>
+                          {diff.severity && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/60">
+                              {diff.severity}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-gray-400 text-[11px] mt-0.5">{diff.explanation}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 font-bold text-[10px]">
+                        <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-400">{diff.baseline_status}</span>
+                        <ArrowRight className="w-3 h-3 text-gray-500" />
+                        <span
+                          className={`px-2 py-0.5 rounded ${
+                            diff.counterfactual_status === 'PASS'
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                              : 'bg-rose-950 text-rose-300 border border-rose-800'
+                          }`}
+                        >
+                          {diff.counterfactual_status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Fingerprint delta */}
-          <div className="bg-surface/30 border border-gray-800 p-3 rounded-lg font-mono text-xs flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-gray-400 text-[10px] uppercase block">Baseline Fingerprint</span>
-              <span className="text-gray-200">{(counterfactualResult.baseline_fingerprint || '').slice(0, 16)}...</span>
-            </div>
-            <ArrowRight className="w-4 h-4 text-cyan-400" />
-            <div>
-              <span className="text-gray-400 text-[10px] uppercase block">Counterfactual Fingerprint</span>
-              <span className="text-cyan-300">{(counterfactualResult.counterfactual_fingerprint || '').slice(0, 16)}...</span>
-            </div>
-          </div>
-
-          {/* Path Differences Table */}
-          {counterfactualResult.path_differences.length > 0 && (
-            <div className="bg-surface/50 border border-gray-800 rounded-lg overflow-hidden">
-              <div className="p-3 border-b border-gray-800 flex items-center justify-between">
-                <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Route className="w-3.5 h-3.5 text-indigo-400" />
-                  Path Reachability Status Shifts ({counterfactualResult.path_differences.length})
-                </h3>
-              </div>
-              <div className="divide-y divide-gray-800 text-xs font-mono">
-                {counterfactualResult.path_differences.map((diff, idx) => (
-                  <div key={idx} className="p-3 flex items-center justify-between hover:bg-slate-900/30">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-semibold">
-                        {diff.source_ip} &rarr; {diff.destination_ip}:{diff.destination_port || diff.protocol}
-                      </span>
-                      <span className="text-gray-400 text-[11px] font-normal">({diff.explanation})</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px]">
-                        {diff.baseline_status}
-                      </span>
-                      <ArrowRight className="w-3 h-3 text-gray-500" />
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          diff.change_type === 'NEWLY_REACHABLE'
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                            : 'bg-rose-950 text-rose-300 border border-rose-800'
-                        }`}
-                      >
-                        {diff.counterfactual_status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Invariant Differences Table */}
-          {counterfactualResult.invariant_differences.length > 0 && (
-            <div className="bg-surface/50 border border-gray-800 rounded-lg overflow-hidden">
-              <div className="p-3 border-b border-gray-800 flex items-center justify-between">
-                <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  Security Invariant State Transitions ({counterfactualResult.invariant_differences.length})
-                </h3>
-              </div>
-              <div className="divide-y divide-gray-800 text-xs font-mono">
-                {counterfactualResult.invariant_differences.map((diff, idx) => (
-                  <div key={idx} className="p-3 flex items-center justify-between hover:bg-slate-900/30">
-                    <div>
-                      <span className="text-white font-semibold">{diff.invariant_name}</span>
-                      <p className="text-gray-400 text-[11px] mt-0.5">{diff.explanation}</p>
-                    </div>
-
-                    <div className="flex items-center gap-2 font-bold text-[10px]">
-                      <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-400">{diff.baseline_status}</span>
-                      <ArrowRight className="w-3 h-3 text-gray-500" />
-                      <span
-                        className={`px-2 py-0.5 rounded ${
-                          diff.counterfactual_status === 'PASS'
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                            : 'bg-rose-950 text-rose-300 border border-rose-800'
-                        }`}
-                      >
-                        {diff.counterfactual_status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* Create Scenario Modal */}
       {showCreateModal && (
@@ -385,14 +447,29 @@ export const CounterfactualScenarioView: React.FC<Props> = ({
 
                 <div>
                   <label className="block text-gray-300 font-medium mb-1">Target Node</label>
-                  <input
-                    type="text"
-                    value={targetNode}
-                    onChange={(e) => setTargetNode(e.target.value)}
-                    placeholder="e.g. firewall-1 or router-1"
-                    className="w-full bg-slate-950 border border-gray-700 rounded px-3 py-1.5 text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
-                    required
-                  />
+                  {availableNodes.length > 0 ? (
+                    <select
+                      value={targetNode}
+                      onChange={(e) => setTargetNode(e.target.value)}
+                      className="w-full bg-slate-950 border border-gray-700 rounded px-3 py-1.5 text-gray-200 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                      required
+                    >
+                      {availableNodes.map((n) => (
+                        <option key={n.node_id} value={n.node_id}>
+                          {n.label ? `${n.label} (${n.node_type})` : `${n.node_id} (${n.node_type})`}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={targetNode}
+                      onChange={(e) => setTargetNode(e.target.value)}
+                      placeholder="e.g. router-1 or node-asset-..."
+                      className="w-full bg-slate-950 border border-gray-700 rounded px-3 py-1.5 text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
+                      required
+                    />
+                  )}
                 </div>
               </div>
 
