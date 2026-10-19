@@ -531,4 +531,126 @@ describe('TopologyGraphView Component', () => {
     expect(screen.getByText('Discovered Services')).toBeInTheDocument();
     expect(screen.getByText(/Interaction Guide/i)).toBeInTheDocument();
   });
+
+  it('supports Focus Graph mode: collapses inspector to expand canvas and toggles back', () => {
+    const { container } = render(
+      <TopologyGraphView
+        topology={mockTopology}
+        selectedNode={null}
+        selectedEdge={null}
+        onSelectNode={vi.fn()}
+        onSelectEdge={vi.fn()}
+        evidenceClassFilter="ALL"
+        onChangeEvidenceFilter={vi.fn()}
+      />
+    );
+
+    // Initially inspector is visible and button shows "Focus Graph"
+    expect(screen.getByText(/Topology Inspector/i)).toBeInTheDocument();
+    const focusButton = screen.getByTestId('focus-graph-button');
+    expect(focusButton).toHaveTextContent('Focus Graph');
+
+    // Click Focus Graph to collapse inspector and expand canvas
+    fireEvent.click(focusButton);
+    expect(screen.queryByText(/Topology Inspector/i)).not.toBeInTheDocument();
+    expect(focusButton).toHaveTextContent('Show Details');
+
+    // Canvas container expands to col-span-full
+    const canvasDiv = container.querySelector('.col-span-full');
+    expect(canvasDiv).toBeInTheDocument();
+
+    // Click Show Details to restore inspector
+    fireEvent.click(focusButton);
+    expect(screen.getByText(/Topology Inspector/i)).toBeInTheDocument();
+    expect(focusButton).toHaveTextContent('Focus Graph');
+  });
+
+  it('arranges subnets in responsive balanced multi-rows when more than 2 subnets exist', () => {
+    const threeSubnetTopology: TopologyGraph = {
+      nodes: [
+        {
+          id: 'sub-1',
+          node_id: 'sub-1',
+          label: 'Subnet 1',
+          node_type: 'SUBNET',
+          subnet_cidr: '10.0.1.0/24',
+          evidence_class: 'CONFIGURED',
+        },
+        {
+          id: 'sub-2',
+          node_id: 'sub-2',
+          label: 'Subnet 2',
+          node_type: 'SUBNET',
+          subnet_cidr: '10.0.2.0/24',
+          evidence_class: 'CONFIGURED',
+        },
+        {
+          id: 'sub-3',
+          node_id: 'sub-3',
+          label: 'Subnet 3',
+          node_type: 'SUBNET',
+          subnet_cidr: '10.0.3.0/24',
+          evidence_class: 'CONFIGURED',
+        },
+        {
+          id: 'rtr-core',
+          node_id: 'rtr-core',
+          label: 'Router 1',
+          node_type: 'ROUTER',
+          evidence_class: 'DIRECTLY_OBSERVED',
+        },
+        {
+          id: 'host-1',
+          node_id: 'host-1',
+          label: 'Host 1',
+          node_type: 'ASSET',
+          subnet_cidr: '10.0.1.0/24',
+          evidence_class: 'DIRECTLY_OBSERVED',
+        },
+        {
+          id: 'host-2',
+          node_id: 'host-2',
+          label: 'Host 2',
+          node_type: 'ASSET',
+          subnet_cidr: '10.0.2.0/24',
+          evidence_class: 'DIRECTLY_OBSERVED',
+        },
+        {
+          id: 'host-3',
+          node_id: 'host-3',
+          label: 'Host 3',
+          node_type: 'ASSET',
+          subnet_cidr: '10.0.3.0/24',
+          evidence_class: 'DIRECTLY_OBSERVED',
+        },
+      ],
+      edges: [],
+      node_count: 7,
+      edge_count: 0,
+    };
+
+    const layout = computeHierarchicalLayout(threeSubnetTopology);
+    expect(layout.subnetContainers.length).toBe(3);
+
+    const [sub1, sub2, sub3] = layout.subnetContainers;
+    expect(sub1).toBeDefined();
+    expect(sub2).toBeDefined();
+    expect(sub3).toBeDefined();
+
+    // Row 0 has sub1 and sub2 side-by-side
+    expect(sub1!.y).toBe(0);
+    expect(sub2!.y).toBe(0);
+    expect(sub2!.x).toBeGreaterThan(sub1!.x + sub1!.width);
+
+    // Row 1 has sub3 arranged below row 0
+    expect(sub3!.y).toBeGreaterThan(sub1!.height);
+
+    // Transit tier is centered above row 0
+    expect(layout.transitTier).toBeDefined();
+    expect(layout.transitTier!.y).toBeLessThan(0);
+
+    // Bounds strictly enclose all 3 subnets in multi-row configuration
+    expect(layout.bounds.maxY).toBeGreaterThan(sub3!.y + sub3!.height);
+    expect(layout.bounds.maxX).toBeGreaterThan(sub2!.x + sub2!.width);
+  });
 });

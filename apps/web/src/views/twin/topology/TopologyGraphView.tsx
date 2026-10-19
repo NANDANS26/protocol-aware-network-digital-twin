@@ -153,19 +153,27 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
   const handleFitToView = useCallback(() => {
     if (!containerRef.current || !layout.bounds) return;
     const { clientWidth, clientHeight } = containerRef.current;
-    if (clientWidth === 0 || clientHeight === 0) return;
+    if (clientWidth <= 0 || clientHeight <= 0) return;
 
     const b = layout.bounds;
-    // 64px padding around layout bounds
+    if (!b.width || !b.height || b.width <= 0 || b.height <= 0) return;
+
+    // Viewport padding around layout bounds
     const paddingX = 64;
     const paddingY = 64;
-    const availableW = Math.max(100, clientWidth - paddingX);
-    const availableH = Math.max(100, clientHeight - paddingY);
+    const availableW = Math.max(50, clientWidth - paddingX);
+    const availableH = Math.max(50, clientHeight - paddingY);
 
-    const scaleX = availableW / Math.max(b.width, 100);
-    const scaleY = availableH / Math.max(b.height, 100);
-    // Clamp optimal scale between 0.25 (for large enterprise graphs) and 1.15
-    const optimalScale = Math.min(Math.max(0.25, Math.min(scaleX, scaleY)), 1.15);
+    const scaleX = availableW / b.width;
+    const scaleY = availableH / b.height;
+    let optimalScale = Math.min(scaleX, scaleY);
+
+    if (!isFinite(optimalScale) || isNaN(optimalScale) || optimalScale <= 0) {
+      optimalScale = 1;
+    } else {
+      // Clamp optimal scale between 0.15 (for large graphs) and 1.50
+      optimalScale = Math.min(Math.max(0.15, optimalScale), 1.5);
+    }
 
     const roundedScale = Number(optimalScale.toFixed(2));
     setZoomLevel(roundedScale);
@@ -173,26 +181,43 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
     // Center layout in viewport
     const offsetX = Math.round(clientWidth / 2 - b.centerX * roundedScale);
     const offsetY = Math.round(clientHeight / 2 - b.centerY * roundedScale);
-    setPanOffset({ x: offsetX, y: offsetY });
+    if (isFinite(offsetX) && isFinite(offsetY)) {
+      setPanOffset({ x: offsetX, y: offsetY });
+    }
   }, [layout.bounds]);
 
   // Automatically center on initial load or layout bound changes
   useEffect(() => {
     if (topology && (topology.nodes || []).length > 0) {
       handleFitToView();
+      const timer = setTimeout(handleFitToView, 60);
+      return () => clearTimeout(timer);
     }
   }, [topology, layout.bounds, handleFitToView]);
 
-  // ResizeObserver to adjust on window, modal, or drawer resize
+  // Active ResizeObserver to adjust on window, modal, or drawer resize
   useEffect(() => {
     if (!containerRef.current || typeof ResizeObserver === 'undefined') return;
     const el = containerRef.current;
-    const observer = new ResizeObserver(() => {
-      // Dimensions changed
+    let animationFrameId: number;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = requestAnimationFrame(() => {
+            handleFitToView();
+          });
+        }
+      }
     });
+
     observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      observer.disconnect();
+    };
+  }, [handleFitToView]);
 
   // Zoom and Pan Controls
   const handleZoomIn = () => setZoomLevel((z) => Math.min(3.0, Number((z + 0.15).toFixed(2))));
@@ -419,19 +444,26 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
             </button>
           </div>
 
-          {/* GROUP 4: Inspector & Actions */}
+          {/* GROUP 4: Focus Graph Mode & Actions */}
           <button
             type="button"
-            onClick={() => setInspectorOpen((prev) => !prev)}
-            title={inspectorOpen ? 'Hide Details Inspector' : 'Show Details Inspector'}
+            data-testid="focus-graph-button"
+            onClick={() => {
+              setInspectorOpen((prev) => !prev);
+              setTimeout(() => {
+                handleFitToView();
+              }, 50);
+            }}
+            title={inspectorOpen ? 'Focus Graph (Hide Details)' : 'Show Details Inspector'}
+            aria-label={inspectorOpen ? 'Focus Graph' : 'Show Details'}
             className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium border transition flex items-center gap-1.5 ${
-              inspectorOpen
-                ? 'bg-indigo-950/80 border-indigo-700/60 text-indigo-300'
-                : 'bg-slate-950/90 border-slate-800 text-slate-400 hover:text-white'
+              !inspectorOpen
+                ? 'bg-indigo-600/30 border-indigo-500/70 text-indigo-200 shadow-sm'
+                : 'bg-slate-950/90 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{inspectorOpen ? 'Hide Details' : 'Show Details'}</span>
+            <span className="hidden sm:inline">{inspectorOpen ? 'Focus Graph' : 'Show Details'}</span>
           </button>
 
           {!isModal && onOpenModal && (
@@ -1048,7 +1080,8 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
         </div>
 
         {/* Comprehensive Detail Inspector Panel */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-4 shadow-sm flex flex-col">
+        {inspectorOpen && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-4 shadow-sm flex flex-col">
           {selectedNode ? (
             <div>
               <div className="flex items-start justify-between border-b border-slate-800 pb-3">
@@ -1336,6 +1369,7 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

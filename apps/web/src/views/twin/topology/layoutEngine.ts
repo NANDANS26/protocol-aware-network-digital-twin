@@ -388,200 +388,293 @@ export function computeHierarchicalLayout(
   const CONTAINER_PADDING_X = 22;
   const CONTAINER_HEADER_HEIGHT = 50;
   const CONTAINER_BOTTOM_PADDING = 20;
+  const SUBNET_COL_GAP = 80;
+  const SUBNET_ROW_GAP = 70;
 
-  let currentContainerX = 0;
   const subnetEntries = Array.from(subnetMap.entries());
 
-  subnetEntries.forEach(([sId, sData]) => {
+  // Pre-calculate subnet box dimensions and column configurations
+  interface SubnetPreCalc {
+    sId: string;
+    sData: {
+      node: TopologyNode;
+      cidr: string;
+      gatewayIp?: string;
+      assets: TopologyNode[];
+    };
+    isCollapsed: boolean;
+    hosts: TopologyNode[];
+    totalServices: number;
+    boxWidth: number;
+    boxHeight: number;
+    numCols: number;
+    assetHeights: number[];
+  }
+
+  const precomputedSubnets: SubnetPreCalc[] = subnetEntries.map(([sId, sData]) => {
     const isCollapsed = collapsedSubnets.has(sId);
     const hosts = sData.assets;
-    const memberNodeIds: string[] = [sId];
     const totalServices = hosts.reduce((acc, h) => {
       const hId = h.node_id || h.id;
       return acc + (hostServiceMap.get(hId)?.length || 0);
     }, 0);
 
     if (isCollapsed) {
-      const boxWidth = 240;
-      const boxHeight = 52;
-      const containerBox: SubnetContainerBox = {
-        subnetId: sId,
-        cidr: sData.cidr,
-        label: sData.node.label,
-        gatewayIp: sData.gatewayIp,
-        hostCount: hosts.length,
-        serviceCount: totalServices,
-        x: currentContainerX,
-        y: 0,
-        width: boxWidth,
-        height: boxHeight,
+      return {
+        sId,
+        sData,
         isCollapsed: true,
-        memberNodeIds,
+        hosts,
+        totalServices,
+        boxWidth: 240,
+        boxHeight: 52,
+        numCols: 1,
+        assetHeights: [],
       };
-      subnetContainers.push(containerBox);
-
-      // Register subnet node at container center
-      placedNodes.set(sId, {
-        nodeId: sId,
-        node: sData.node,
-        x: currentContainerX + boxWidth / 2,
-        y: boxHeight / 2,
-        width: boxWidth,
-        height: boxHeight,
-        box: { x: currentContainerX, y: 0, width: boxWidth, height: boxHeight },
-        isCollapsed: true,
-      });
-
-      // Mark member nodes as placed inside collapsed container
-      hosts.forEach((h) => {
-        const hId = h.node_id || h.id;
-        memberNodeIds.push(hId);
-        placedNodes.set(hId, {
-          nodeId: hId,
-          node: h,
-          x: currentContainerX + boxWidth / 2,
-          y: boxHeight / 2,
-          width: 0,
-          height: 0,
-          box: { x: currentContainerX, y: 0, width: boxWidth, height: boxHeight },
-          subnetId: sId,
-          isCollapsed: true,
-        });
-
-        const svcs = hostServiceMap.get(hId) || [];
-        svcs.forEach((svc) => {
-          const svcId = svc.node_id || svc.id;
-          memberNodeIds.push(svcId);
-          placedNodes.set(svcId, {
-            nodeId: svcId,
-            node: svc,
-            x: currentContainerX + boxWidth / 2,
-            y: boxHeight / 2,
-            width: 0,
-            height: 0,
-            box: { x: currentContainerX, y: 0, width: boxWidth, height: boxHeight },
-            subnetId: sId,
-            hostAssetId: hId,
-            isCollapsed: true,
-          });
-        });
-      });
-
-      currentContainerX += boxWidth + 80;
-      return;
     }
 
-    // Expanded Layout
     const numCols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(Math.max(1, hosts.length)))));
     const boxWidth =
       CONTAINER_PADDING_X * 2 +
       numCols * ASSET_CARD_WIDTH +
       (numCols - 1) * GRID_COL_GAP;
 
-    // Track column heights for collision-free stacking
     const colY = new Array(numCols).fill(CONTAINER_HEADER_HEIGHT + 14);
+    const assetHeights: number[] = [];
 
     hosts.forEach((asset, idx) => {
       const aId = asset.node_id || asset.id;
-      memberNodeIds.push(aId);
-
       const col = idx % numCols;
-      const posX = currentContainerX + CONTAINER_PADDING_X + col * (ASSET_CARD_WIDTH + GRID_COL_GAP);
-      const posY = colY[col]!;
-
       const attachedServices = hostServiceMap.get(aId) || [];
       const serviceHeight = attachedServices.length * (SERVICE_CHIP_HEIGHT + 4);
-      const totalCardHeight = ASSET_CARD_BASE_HEIGHT + (attachedServices.length > 0 ? serviceHeight + 8 : 0);
+      const totalCardHeight =
+        ASSET_CARD_BASE_HEIGHT + (attachedServices.length > 0 ? serviceHeight + 8 : 0);
 
-      // Register placed Asset Card
-      placedNodes.set(aId, {
-        nodeId: aId,
-        node: asset,
-        x: posX + ASSET_CARD_WIDTH / 2,
-        y: posY + totalCardHeight / 2,
-        width: ASSET_CARD_WIDTH,
-        height: totalCardHeight,
-        box: {
-          x: posX,
-          y: posY,
-          width: ASSET_CARD_WIDTH,
-          height: totalCardHeight,
-        },
-        subnetId: sId,
-        isCollapsed: false,
-      });
-
-      // Place attached services docked inside the asset's card footprint
-      let svcTop = posY + ASSET_CARD_BASE_HEIGHT + 4;
-      attachedServices.forEach((svc) => {
-        const svcId = svc.node_id || svc.id;
-        memberNodeIds.push(svcId);
-        const svcW = ASSET_CARD_WIDTH - 16;
-        const svcH = SERVICE_CHIP_HEIGHT;
-
-        placedNodes.set(svcId, {
-          nodeId: svcId,
-          node: svc,
-          x: posX + ASSET_CARD_WIDTH / 2,
-          y: svcTop + svcH / 2,
-          width: svcW,
-          height: svcH,
-          box: {
-            x: posX + 8,
-            y: svcTop,
-            width: svcW,
-            height: svcH,
-          },
-          subnetId: sId,
-          hostAssetId: aId,
-          isCollapsed: false,
-        });
-
-        svcTop += svcH + 4;
-      });
-
-      colY[col] = posY + totalCardHeight + GRID_ROW_GAP;
+      assetHeights.push(totalCardHeight);
+      colY[col] += totalCardHeight + GRID_ROW_GAP;
     });
 
     const maxColY = Math.max(...colY, CONTAINER_HEADER_HEIGHT + 80);
     const boxHeight = maxColY + CONTAINER_BOTTOM_PADDING;
 
-    const containerBox: SubnetContainerBox = {
-      subnetId: sId,
-      cidr: sData.cidr,
-      label: sData.node.label,
-      gatewayIp: sData.gatewayIp,
-      hostCount: hosts.length,
-      serviceCount: totalServices,
-      x: currentContainerX,
-      y: 0,
-      width: boxWidth,
-      height: boxHeight,
+    return {
+      sId,
+      sData,
       isCollapsed: false,
-      memberNodeIds,
+      hosts,
+      totalServices,
+      boxWidth,
+      boxHeight,
+      numCols,
+      assetHeights,
     };
-    subnetContainers.push(containerBox);
+  });
 
-    // Register Subnet Node itself at top-center of container
-    placedNodes.set(sId, {
-      nodeId: sId,
-      node: sData.node,
-      x: currentContainerX + boxWidth / 2,
-      y: CONTAINER_HEADER_HEIGHT / 2,
-      width: boxWidth,
-      height: CONTAINER_HEADER_HEIGHT,
-      box: {
-        x: currentContainerX,
-        y: 0,
-        width: boxWidth,
-        height: CONTAINER_HEADER_HEIGHT,
-      },
-      subnetId: sId,
-      isCollapsed: false,
+  // Calculate balanced multi-row columns
+  // <= 2 subnets -> 1 row (side-by-side)
+  // 3-4 subnets -> 2 columns per row
+  // 5+ subnets -> 3 columns per row
+  const colsPerRow =
+    precomputedSubnets.length <= 2
+      ? precomputedSubnets.length
+      : precomputedSubnets.length <= 4
+      ? 2
+      : 3;
+
+  let currentY = 0;
+  let maxGridRight = 0;
+  const numRows = colsPerRow > 0 ? Math.ceil(precomputedSubnets.length / colsPerRow) : 0;
+
+  for (let r = 0; r < numRows; r++) {
+    const rowSubnets = precomputedSubnets.slice(r * colsPerRow, (r + 1) * colsPerRow);
+    const rowHeight = Math.max(...rowSubnets.map((s) => s.boxHeight));
+    let currentX = 0;
+
+    rowSubnets.forEach((sub) => {
+      const {
+        sId,
+        sData,
+        isCollapsed,
+        hosts,
+        totalServices,
+        boxWidth,
+        boxHeight,
+        numCols,
+        assetHeights,
+      } = sub;
+      const containerX = currentX;
+      const containerY = currentY;
+      const memberNodeIds: string[] = [sId];
+
+      if (isCollapsed) {
+        const containerBox: SubnetContainerBox = {
+          subnetId: sId,
+          cidr: sData.cidr,
+          label: sData.node.label,
+          gatewayIp: sData.gatewayIp,
+          hostCount: hosts.length,
+          serviceCount: totalServices,
+          x: containerX,
+          y: containerY,
+          width: boxWidth,
+          height: boxHeight,
+          isCollapsed: true,
+          memberNodeIds,
+        };
+        subnetContainers.push(containerBox);
+
+        // Register subnet node at container center
+        placedNodes.set(sId, {
+          nodeId: sId,
+          node: sData.node,
+          x: containerX + boxWidth / 2,
+          y: containerY + boxHeight / 2,
+          width: boxWidth,
+          height: boxHeight,
+          box: { x: containerX, y: containerY, width: boxWidth, height: boxHeight },
+          isCollapsed: true,
+        });
+
+        // Mark member nodes as placed inside collapsed container
+        hosts.forEach((h) => {
+          const hId = h.node_id || h.id;
+          memberNodeIds.push(hId);
+          placedNodes.set(hId, {
+            nodeId: hId,
+            node: h,
+            x: containerX + boxWidth / 2,
+            y: containerY + boxHeight / 2,
+            width: 0,
+            height: 0,
+            box: { x: containerX, y: containerY, width: boxWidth, height: boxHeight },
+            subnetId: sId,
+            isCollapsed: true,
+          });
+
+          const svcs = hostServiceMap.get(hId) || [];
+          svcs.forEach((svc) => {
+            const svcId = svc.node_id || svc.id;
+            memberNodeIds.push(svcId);
+            placedNodes.set(svcId, {
+              nodeId: svcId,
+              node: svc,
+              x: containerX + boxWidth / 2,
+              y: containerY + boxHeight / 2,
+              width: 0,
+              height: 0,
+              box: { x: containerX, y: containerY, width: boxWidth, height: boxHeight },
+              subnetId: sId,
+              hostAssetId: hId,
+              isCollapsed: true,
+            });
+          });
+        });
+      } else {
+        // Expanded Layout
+        const colY = new Array(numCols).fill(containerY + CONTAINER_HEADER_HEIGHT + 14);
+
+        hosts.forEach((asset, idx) => {
+          const aId = asset.node_id || asset.id;
+          memberNodeIds.push(aId);
+
+          const col = idx % numCols;
+          const posX =
+            containerX + CONTAINER_PADDING_X + col * (ASSET_CARD_WIDTH + GRID_COL_GAP);
+          const posY = colY[col]!;
+          const totalCardHeight = assetHeights[idx] || ASSET_CARD_BASE_HEIGHT;
+
+          // Register placed Asset Card
+          placedNodes.set(aId, {
+            nodeId: aId,
+            node: asset,
+            x: posX + ASSET_CARD_WIDTH / 2,
+            y: posY + totalCardHeight / 2,
+            width: ASSET_CARD_WIDTH,
+            height: totalCardHeight,
+            box: {
+              x: posX,
+              y: posY,
+              width: ASSET_CARD_WIDTH,
+              height: totalCardHeight,
+            },
+            subnetId: sId,
+            isCollapsed: false,
+          });
+
+          // Place attached services docked inside the asset's card footprint
+          let svcTop = posY + ASSET_CARD_BASE_HEIGHT + 4;
+          const attachedServices = hostServiceMap.get(aId) || [];
+          attachedServices.forEach((svc) => {
+            const svcId = svc.node_id || svc.id;
+            memberNodeIds.push(svcId);
+            const svcW = ASSET_CARD_WIDTH - 16;
+            const svcH = SERVICE_CHIP_HEIGHT;
+
+            placedNodes.set(svcId, {
+              nodeId: svcId,
+              node: svc,
+              x: posX + ASSET_CARD_WIDTH / 2,
+              y: svcTop + svcH / 2,
+              width: svcW,
+              height: svcH,
+              box: {
+                x: posX + 8,
+                y: svcTop,
+                width: svcW,
+                height: svcH,
+              },
+              subnetId: sId,
+              hostAssetId: aId,
+              isCollapsed: false,
+            });
+
+            svcTop += svcH + 4;
+          });
+
+          colY[col] = posY + totalCardHeight + GRID_ROW_GAP;
+        });
+
+        const containerBox: SubnetContainerBox = {
+          subnetId: sId,
+          cidr: sData.cidr,
+          label: sData.node.label,
+          gatewayIp: sData.gatewayIp,
+          hostCount: hosts.length,
+          serviceCount: totalServices,
+          x: containerX,
+          y: containerY,
+          width: boxWidth,
+          height: boxHeight,
+          isCollapsed: false,
+          memberNodeIds,
+        };
+        subnetContainers.push(containerBox);
+
+        // Register Subnet Node itself at top-center of container
+        placedNodes.set(sId, {
+          nodeId: sId,
+          node: sData.node,
+          x: containerX + boxWidth / 2,
+          y: containerY + CONTAINER_HEADER_HEIGHT / 2,
+          width: boxWidth,
+          height: CONTAINER_HEADER_HEIGHT,
+          box: {
+            x: containerX,
+            y: containerY,
+            width: boxWidth,
+            height: CONTAINER_HEADER_HEIGHT,
+          },
+          subnetId: sId,
+          isCollapsed: false,
+        });
+      }
+
+      currentX += boxWidth + SUBNET_COL_GAP;
+      maxGridRight = Math.max(maxGridRight, currentX);
     });
 
-    currentContainerX += boxWidth + 80;
-  });
+    currentY += rowHeight + SUBNET_ROW_GAP;
+  }
 
   // 5. Place Routers in Transit / Routing Tier
   let transitTier: TransitTierBox | undefined;
@@ -596,13 +689,18 @@ export function computeHierarchicalLayout(
       (routerNodes.length - 1) * ROUTER_GAP;
     const tierHeight = CONTAINER_HEADER_HEIGHT + ROUTER_HEIGHT + 24;
 
-    // Center transit tier above or between subnets
-    const avgSubnetX =
-      subnetContainers.length > 0
-        ? (subnetContainers[0]!.x + subnetContainers[subnetContainers.length - 1]!.x + subnetContainers[subnetContainers.length - 1]!.width) / 2
-        : 200;
-    const tierX = Math.round(avgSubnetX - tierWidth / 2);
-    const tierY = - (tierHeight + 60);
+    // Center transit tier horizontally above the top row of subnets
+    let tierCenterX = 200;
+    let minSubnetTopY = 0;
+    if (subnetContainers.length > 0) {
+      const minX = Math.min(...subnetContainers.map((s) => s.x));
+      const maxX = Math.max(...subnetContainers.map((s) => s.x + s.width));
+      tierCenterX = (minX + maxX) / 2;
+      minSubnetTopY = Math.min(...subnetContainers.map((s) => s.y));
+    }
+
+    const tierX = Math.round(tierCenterX - tierWidth / 2);
+    const tierY = minSubnetTopY - (tierHeight + 60);
 
     transitTier = {
       x: tierX,
@@ -647,7 +745,7 @@ export function computeHierarchicalLayout(
       unresolvedNodes.length * (UNRESOLVED_CARD_HEIGHT + 12) +
       CONTAINER_BOTTOM_PADDING;
 
-    const uX = currentContainerX;
+    const uX = maxGridRight > 0 ? maxGridRight : 0;
     const uY = 0;
 
     unresolvedContainer = {
@@ -681,8 +779,6 @@ export function computeHierarchicalLayout(
 
       itemY += UNRESOLVED_CARD_HEIGHT + 12;
     });
-
-    currentContainerX += uWidth + 60;
   }
 
   // 7. Route Edges (Boundary-to-Boundary Curves)
@@ -792,6 +888,19 @@ export function computeHierarchicalLayout(
     });
   }
 
+  // Include non-collapsed placed nodes to guarantee node labels and badges are enclosed
+  placedNodes.forEach((pn) => {
+    if (!pn.isCollapsed && pn.width > 0 && pn.height > 0) {
+      allBoxes.push(pn.box);
+    }
+  });
+
+  // Include routed edge endpoints
+  routedEdges.forEach((e) => {
+    allBoxes.push({ x: e.sourcePoint.x - 12, y: e.sourcePoint.y - 12, width: 24, height: 24 });
+    allBoxes.push({ x: e.targetPoint.x - 12, y: e.targetPoint.y - 12, width: 24, height: 24 });
+  });
+
   if (allBoxes.length > 0) {
     minX = Math.min(...allBoxes.map((b) => b.x));
     minY = Math.min(...allBoxes.map((b) => b.y));
@@ -807,8 +916,8 @@ export function computeHierarchicalLayout(
     }
   }
 
-  // Margin
-  const PADDING = 60;
+  // Generous safety margin to protect shadows, badges, ports, and edge arcs
+  const PADDING = 64;
   minX -= PADDING;
   minY -= PADDING;
   maxX += PADDING;
