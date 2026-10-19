@@ -20,7 +20,6 @@ from network_twin.simulation.models import (
     FilterStatefulness,
     FirewallRule,
     InvariantDifference,
-    InvariantSeverity,
     IPAddressAssignment,
     NetworkModel,
     PathDifference,
@@ -221,17 +220,27 @@ class ScenarioEngine:
 
         firewall_nodes = [n for n in model.nodes.values() if n.node_type.value == "FIREWALL"]
         if is_firewall_query and firewall_nodes:
-            logger.info("Resolved target alias '%s' to FIREWALL node '%s' (%s)", tid, firewall_nodes[0].node_id, firewall_nodes[0].label)
+            logger.info(
+                "Resolved target alias '%s' to FIREWALL node '%s' (%s)",
+                tid,
+                firewall_nodes[0].node_id,
+                firewall_nodes[0].label,
+            )
             return firewall_nodes[0]
 
         router_nodes = [n for n in model.nodes.values() if n.node_type.value == "ROUTER"]
         if router_nodes:
-            is_firewall_action = action_type in (
-                SimulationActionType.ADD_FIREWALL_RULE,
-                SimulationActionType.REMOVE_FIREWALL_RULE,
-                SimulationActionType.MODIFY_FIREWALL_RULE,
-                SimulationActionType.REORDER_FIREWALL_RULES,
-            ) if action_type else False
+            is_firewall_action = (
+                action_type
+                in (
+                    SimulationActionType.ADD_FIREWALL_RULE,
+                    SimulationActionType.REMOVE_FIREWALL_RULE,
+                    SimulationActionType.MODIFY_FIREWALL_RULE,
+                    SimulationActionType.REORDER_FIREWALL_RULES,
+                )
+                if action_type
+                else False
+            )
 
             if is_firewall_query or is_router_query or is_firewall_action:
                 preferred = next((r for r in router_nodes if r.acls), router_nodes[0])
@@ -283,10 +292,14 @@ class ScenarioEngine:
             elif action.action_type == SimulationActionType.ADD_FIREWALL_RULE:
                 action_val = params.get("action", "DENY")
                 if action_val not in ("PERMIT", "DENY"):
-                    errors.append(f"Action #{idx} (ADD_FIREWALL_RULE): Invalid action '{action_val}'. Must be PERMIT or DENY.")
+                    errors.append(
+                        f"Action #{idx} (ADD_FIREWALL_RULE): Invalid action '{action_val}'. Must be PERMIT or DENY."
+                    )
                 dir_val = params.get("direction", "INGRESS")
                 if dir_val not in ("INGRESS", "EGRESS"):
-                    errors.append(f"Action #{idx} (ADD_FIREWALL_RULE): Invalid direction '{dir_val}'. Must be INGRESS or EGRESS.")
+                    errors.append(
+                        f"Action #{idx} (ADD_FIREWALL_RULE): Invalid direction '{dir_val}'. Must be INGRESS or EGRESS."
+                    )
                 port = params.get("destination_port")
                 if port is not None and not (isinstance(port, int) and 1 <= port <= 65535):
                     errors.append(f"Action #{idx} (ADD_FIREWALL_RULE): Port must be an integer between 1 and 65535.")

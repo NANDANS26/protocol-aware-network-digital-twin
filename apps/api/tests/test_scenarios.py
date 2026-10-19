@@ -356,4 +356,3 @@ def test_counterfactual_result_contract_compatibility():
     assert res.newly_blocked_paths_count == 3
     assert res.security_regressions_count == 1
     assert res.created_at_iso == res.executed_at_iso
-
