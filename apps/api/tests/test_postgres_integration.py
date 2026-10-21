@@ -147,7 +147,11 @@ def test_postgres_metadata_store_crud():
         file_size_bytes=1024,
         status="completed",
         created_at="2026-10-21T00:00:00Z",
-        summary_dict={"total_packets": 100, "flows": 3},
+        summary_dict={
+            "capture_file": "test_pcap.pcap",
+            "total_packets": 100,
+            "total_flows": 3,
+        },
     )
     job = store.get_analysis_job(test_job_id)
     assert job is not None

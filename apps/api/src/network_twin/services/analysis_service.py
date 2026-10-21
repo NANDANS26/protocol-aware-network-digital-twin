@@ -579,6 +579,15 @@ class AnalysisService:
         if all_evidence:
             self.metadata_store.save_evidence_records(all_evidence)
 
+    @staticmethod
+    def _parse_job_summary(summary_data: Any) -> AnalysisSummaryModel | None:
+        if not summary_data:
+            return None
+        try:
+            return AnalysisSummaryModel.model_validate(summary_data)
+        except Exception:
+            return None
+
     def get_job(self, job_id: str) -> AnalysisJob | None:
         row = self.metadata_store.get_analysis_job(job_id)
         if not row:
@@ -592,7 +601,7 @@ class AnalysisService:
             created_at=datetime.fromisoformat(row["created_at"]),
             completed_at=datetime.fromisoformat(row["completed_at"]) if row.get("completed_at") else None,
             error_message=row.get("error_message"),
-            summary=AnalysisSummaryModel.model_validate(row["summary"]) if row.get("summary") else None,
+            summary=self._parse_job_summary(row.get("summary")),
         )
 
     def list_jobs(self) -> list[AnalysisJob]:
@@ -607,7 +616,7 @@ class AnalysisService:
                 created_at=datetime.fromisoformat(row["created_at"]),
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row.get("completed_at") else None,
                 error_message=row.get("error_message"),
-                summary=AnalysisSummaryModel.model_validate(row["summary"]) if row.get("summary") else None,
+                summary=self._parse_job_summary(row.get("summary")),
             )
             for row in rows
         ]

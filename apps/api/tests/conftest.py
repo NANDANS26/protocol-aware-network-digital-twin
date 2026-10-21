@@ -7,6 +7,14 @@ from network_twin.config import AppSettings
 from network_twin.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _isolate_unit_tests(monkeypatch, request):
+    """Ensure unit tests use isolated SQLite storage unless explicitly testing PostgreSQL."""
+    if "test_postgres_integration" in request.node.nodeid:
+        return
+    monkeypatch.delenv("NTWIN_DATABASE_URL", raising=False)
+
+
 @pytest.fixture
 def test_settings() -> AppSettings:
     return AppSettings(
