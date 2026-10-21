@@ -200,8 +200,10 @@ describe('ScenarioLaboratoryView & Counterfactual Workstation Redesign', () => {
     expect(checkbox).toBeInTheDocument();
 
     fireEvent.click(checkbox);
-    const updatedOptionTexts = Array.from(select.options).map((o) => o.text);
-    expect(updatedOptionTexts.some((t) => t.includes('[Derived]'))).toBe(true);
+    await waitFor(() => {
+      const updatedOptionTexts = Array.from(select.options).map((o) => o.text);
+      expect(updatedOptionTexts.some((t) => t.includes('[Derived]'))).toBe(true);
+    });
   });
 
   it('renders structured action cards with parameters and node label mapping', async () => {

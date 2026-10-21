@@ -8,12 +8,14 @@ from network_twin.services.analysis_service import analysis_service
 
 def test_ptp_capture_classification_and_telemetry():
     """Verify IEEE 1588 PTP capture is classified as PTP and never falsely classified as DNS."""
-    upload_dir = Path("data/uploads")
-    pcap_files = list(upload_dir.glob("*IEEE1588_Precision Time Protocol-PTPv2-Sequence.pcap"))
-    assert len(pcap_files) > 0, "PTP test pcap fixture not found in data/uploads"
-    pcap_path = pcap_files[0]
+    fixture_path = Path("tests/fixtures/IEEE1588_Precision_Time_Protocol_PTPv2_Sequence.pcap")
+    if not fixture_path.is_file():
+        upload_dir = Path("data/uploads")
+        pcap_files = list(upload_dir.glob("*IEEE1588_Precision Time Protocol-PTPv2-Sequence.pcap"))
+        assert len(pcap_files) > 0, "PTP test pcap fixture not found in tests/fixtures or data/uploads"
+        fixture_path = pcap_files[0]
 
-    with open(pcap_path, "rb") as f:
+    with open(fixture_path, "rb") as f:
         content = f.read()
 
     job = analysis_service.analyze_capture(filename="IEEE1588_PTPv2_Sequence.pcap", content=content)
