@@ -261,6 +261,8 @@ export interface PathDifference {
   counterfactual_status: ReachabilityStatus;
   change_type: string;
   explanation: string;
+  baseline_reason?: string | null;
+  counterfactual_reason?: string | null;
 }
 
 export interface InvariantDifference {

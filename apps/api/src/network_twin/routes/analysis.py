@@ -49,6 +49,7 @@ async def upload_capture(
         job = service.analyze_capture(filename=filename, content=content)
         return JobUploadResponse(
             job_id=job.job_id,
+            capture_id=job.capture_id,
             filename=job.filename,
             file_size_bytes=job.file_size_bytes,
             status=job.status,
@@ -89,6 +90,7 @@ async def run_demo_analysis(
         job = service.analyze_capture(filename=fixture_path.name, content=content)
         return JobUploadResponse(
             job_id=job.job_id,
+            capture_id=job.capture_id,
             filename=job.filename,
             file_size_bytes=job.file_size_bytes,
             status=job.status,

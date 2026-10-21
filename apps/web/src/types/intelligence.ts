@@ -44,6 +44,8 @@ export interface Asset {
   first_seen_iso?: string;
   last_seen_iso?: string;
   evidence_ids?: string[];
+  is_multicast?: boolean;
+  is_l2_only?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -141,6 +143,31 @@ export interface TopologyGraph {
   services_count?: number;
 }
 
+export interface SkippedOrRejectedRecord {
+  item_id: string;
+  item_type: 'ASSET' | 'SUBNET' | 'ROUTE' | 'NEIGHBOR' | 'FLOW' | 'SERVICE' | string;
+  action: 'SKIPPED' | 'REJECTED';
+  reason: string;
+}
+
+export interface ConsumptionAudit {
+  consumed_assets_count: number;
+  consumed_subnets_count: number;
+  consumed_services_count: number;
+  consumed_edges_count: number;
+  consumed_subnets?: string[];
+  source_captures?: string[];
+  source_configs?: string[];
+  skipped_or_rejected: SkippedOrRejectedRecord[];
+}
+
+export interface EvidenceCoverageSummary {
+  directly_observed_pct: number;
+  inferred_pct: number;
+  configured_pct: number;
+  total_elements: number;
+}
+
 export interface TopologySnapshot {
   snapshot_id: string;
   name: string;
@@ -151,35 +178,87 @@ export interface TopologySnapshot {
   edge_count: number;
   source_captures: string[];
   source_configs: string[];
+  capture_id?: string | null;
+  analysis_job_id?: string | null;
   graph_summary?: Record<string, unknown>;
+  metadata?: {
+    generator?: string;
+    timestamp?: string;
+    source_type?: string;
+    capture_id?: string | null;
+    capture_filename?: string | null;
+    analysis_job_id?: string | null;
+    derivation_method?: string;
+    confidence?: number;
+    node_count?: number;
+    edge_count?: number;
+    consumption_audit?: ConsumptionAudit;
+    evidence_coverage?: EvidenceCoverageSummary;
+    limitations?: string[];
+    derived_model_id?: string;
+    derived_model_fingerprint?: string;
+    [key: string]: any;
+  };
+}
+
+export interface DiffExplanationItem {
+  type?: string;
+  node_id?: string;
+  edge_id?: string;
+  evidence_class?: string;
+  explanation?: string;
+  evidence_ids?: string[];
+  [key: string]: unknown;
+}
+
+export interface NodeDiffRecord {
+  node_id: string;
+  changes?: Record<string, { from?: unknown; to?: unknown }>;
+  explanation?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+export interface EdgeDiffRecord {
+  edge_id: string;
+  changes?: Record<string, { from?: unknown; to?: unknown }>;
+  explanation?: string;
+  evidence_class?: string;
+  evidence_ids?: string[];
+  type?: string;
+  [key: string]: unknown;
 }
 
 export interface SnapshotComparisonDiff {
   base_snapshot_id: string;
   target_snapshot_id: string;
-  compared_at_iso: string;
+  compared_at_iso?: string;
   added_nodes: TopologyNode[];
   removed_nodes: TopologyNode[];
-  changed_nodes: Array<{
+  modified_nodes?: NodeDiffRecord[];
+  changed_nodes?: Array<{
     node_id: string;
-    field: string;
-    base_value: unknown;
-    target_value: unknown;
+    field?: string;
+    base_value?: unknown;
+    target_value?: unknown;
+    changes?: Record<string, { from?: unknown; to?: unknown }>;
   }>;
   added_edges: TopologyEdge[];
   removed_edges: TopologyEdge[];
-  changed_edges: Array<{
+  modified_edges?: EdgeDiffRecord[];
+  changed_edges?: Array<{
     edge_id: string;
-    field: string;
-    base_value: unknown;
-    target_value: unknown;
+    field?: string;
+    base_value?: unknown;
+    target_value?: unknown;
+    changes?: Record<string, { from?: unknown; to?: unknown }>;
   }>;
-  evidence_explanations: string[];
+  evidence_explanations: Array<DiffExplanationItem | string>;
 }
 
 export interface ConfigImportRequest {
   source_name: string;
-  format: 'json' | 'csv';
+  format: 'routing_table' | 'neighbor_table' | 'inventory' | 'json' | 'csv' | string;
   content: string;
 }
 
@@ -187,7 +266,9 @@ export interface ConfigImportResult {
   import_id: string;
   source_name: string;
   source_type: string;
-  imported_at_iso: string;
+  format?: string;
+  imported_at_iso?: string;
+  created_at?: string;
   items_imported: number;
   status: string;
   errors: string[];
@@ -196,12 +277,43 @@ export interface ConfigImportResult {
 export interface CaptureMetadata {
   capture_id: string;
   file_name: string;
+  filename?: string;
   file_size_bytes: number;
   sha256_hash: string;
+  content_sha256?: string;
   packet_count: number;
-  link_type: number;
-  ingested_at_iso: string;
+  event_count?: number;
+  accepted_count?: number;
+  rejected_count?: number;
+  unsupported_count?: number;
+  link_type?: number;
+  ingested_at_iso?: string;
+  uploaded_at?: string;
   format: string;
+  lifecycle_status?: string;
+  active_analysis_run_id?: string;
+  engine_version?: string;
+  pipeline_version?: string;
+  schema_version?: string;
+}
+
+export interface ActiveCaptureContext {
+  capture_id: string;
+  filename: string;
+  content_sha256?: string;
+  lifecycle_status: string;
+  active_analysis_run_id?: string | null;
+  latest_run?: Record<string, unknown> | null;
+  packet_count: number;
+  event_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  unsupported_count: number;
+  engine_version: string;
+  pipeline_version: string;
+  schema_version: string;
+  latest_snapshot_id?: string | null;
+  snapshots_count: number;
 }
 
 export interface TopTalker {

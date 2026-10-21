@@ -230,4 +230,120 @@ describe('StatefulSequenceWorkbench Component', () => {
       expect(screen.queryByText(/Engine Coverage Boundaries & Documented Limitations/i)).not.toBeInTheDocument();
     });
   });
+
+  it('safely handles backend coverage gaps returning supported_stateful_semantics without crashing on map', async () => {
+    vi.mocked(apiClient.getCoverageGaps).mockResolvedValue({
+      status: 'documented',
+      supported_stateful_semantics: ['RFC 793 TCP Handshake', 'DNS Query Transaction'],
+      coverage_gaps_and_limitations: [
+        {
+          subsystem: 'TLS Handshake Decryption',
+          status: 'METADATA_EXTRACTION_ONLY',
+          details: 'Extracts SNI/ALPN without decrypting session payloads',
+          feature: 'TLS Handshake Decryption',
+          limitation_status: 'METADATA_EXTRACTION_ONLY',
+          description: 'Extracts SNI/ALPN without decrypting session payloads',
+          behavior: 'SNI and ALPN extracted only',
+        },
+      ],
+    } as unknown as CoverageGapsResponse);
+
+    render(<StatefulSequenceWorkbench />);
+
+    const gapsBtn = screen.getByText('Coverage Gaps & Limits');
+    fireEvent.click(gapsBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('RFC 793 TCP Handshake')).toBeInTheDocument();
+      expect(screen.getByText('TLS Handshake Decryption')).toBeInTheDocument();
+      expect(screen.getByText('METADATA_EXTRACTION_ONLY')).toBeInTheDocument();
+    });
+  });
+
+  it('runs differential check and renders equivalent verification banner', async () => {
+    vi.mocked(apiClient.runSequenceDifferential).mockResolvedValue({
+      test_name: 'pcap_vs_pcapng_differential',
+      equivalent: true,
+      mode: 'pcap_vs_pcapng',
+      sequence_id: 'seq-tcp-handshake-42',
+      baseline_events_count: 3,
+      candidate_events_count: 3,
+      duration_ms: 8.4,
+      differences: [],
+      diagnostic: null,
+      baseline_name: 'PCAP Format',
+      candidate_name: 'PCAPNG Format',
+      baseline_event_count: 3,
+      candidate_event_count: 3,
+    });
+
+    render(<StatefulSequenceWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Run Differential Check')).toBeInTheDocument();
+    });
+
+    const diffBtn = screen.getByText('Run Differential Check');
+    fireEvent.click(diffBtn);
+
+    await waitFor(() => {
+      expect(apiClient.runSequenceDifferential).toHaveBeenCalledWith({
+        sequence_id: 'seq-tcp-handshake-42',
+        mode: 'pcap_vs_pcapng',
+      });
+      expect(screen.getByText('EQUIVALENT OUTPUT CONFIRMED')).toBeInTheDocument();
+      expect(screen.getByText(/3 events/i)).toBeInTheDocument();
+    });
+  });
+
+  it('runs differential check with divergences and renders semantic discrepancy breakdown', async () => {
+    vi.mocked(apiClient.runSequenceDifferential).mockResolvedValue({
+      test_name: 'pcap_vs_pcapng_differential',
+      equivalent: false,
+      mode: 'pcap_vs_pcapng',
+      sequence_id: 'seq-tcp-handshake-42',
+      baseline_events_count: 3,
+      candidate_events_count: 2,
+      duration_ms: 11.2,
+      differences: ['Event 2 timestamp mismatch: baseline 10ms vs candidate 15ms'],
+      diagnostic: 'State machine divergence on step 2',
+      baseline_name: 'PCAP Baseline',
+      candidate_name: 'PCAPNG Candidate',
+      baseline_event_count: 3,
+      candidate_event_count: 2,
+    });
+
+    render(<StatefulSequenceWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Run Differential Check')).toBeInTheDocument();
+    });
+
+    const diffBtn = screen.getByText('Run Differential Check');
+    fireEvent.click(diffBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('DIVERGENCE DETECTED')).toBeInTheDocument();
+      expect(screen.getByText('Event 2 timestamp mismatch: baseline 10ms vs candidate 15ms')).toBeInTheDocument();
+      expect(screen.getByText('State machine divergence on step 2')).toBeInTheDocument();
+    });
+  });
+
+  it('handles differential check failure gracefully with visible error banner', async () => {
+    vi.mocked(apiClient.runSequenceDifferential).mockRejectedValue(new Error('Backend connection refused'));
+
+    render(<StatefulSequenceWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Run Differential Check')).toBeInTheDocument();
+    });
+
+    const diffBtn = screen.getByText('Run Differential Check');
+    fireEvent.click(diffBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Differential Verification Error')).toBeInTheDocument();
+      expect(screen.getByText('Backend connection refused')).toBeInTheDocument();
+    });
+  });
 });

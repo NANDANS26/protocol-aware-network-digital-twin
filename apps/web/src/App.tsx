@@ -6,19 +6,50 @@ import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './views/OverviewView';
 import { ObservatoryView } from './views/ObservatoryView';
 import { NetworkTwinView } from './views/NetworkTwinView';
-import { SecurityTestingWorkbench } from './views/twin/SecurityTestingWorkbench';
+import { ProtocolResearchLabView } from './views/ProtocolResearchLabView';
 import { InvestigationWorkbench } from './views/twin/InvestigationWorkbench';
 import { ScenarioLaboratoryView } from './views/ScenarioLaboratoryView';
 import { PlaceholderView } from './views/PlaceholderView';
 import { NAVIGATION_TABS, type NavigationTab } from './types/navigation';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AnalysisProvider, useAnalysisContext } from './context/AnalysisContext';
 
-export const App: React.FC = () => {
+export const AppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
+  const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
   const [health, setHealth] = useState<HealthStatusResponse | null>(null);
   const [readiness, setReadiness] = useState<HealthStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
+
+  // Cross-workspace navigation states
+  const [twinInitialSnapshotId, setTwinInitialSnapshotId] = useState<string | null>(null);
+  const [twinInitialCaptureId, setTwinInitialCaptureId] = useState<string | null>(null);
+
+  const { activeCaptureId, selectedSnapshotId, setActiveCaptureId, setSelectedSnapshotId } = useAnalysisContext();
+
+  const handleNavigateToTwin = useCallback((params: { captureId?: string; snapshotId?: string; filename?: string; jobId?: string }) => {
+    if (params.snapshotId) {
+      setTwinInitialSnapshotId(params.snapshotId);
+      setSelectedSnapshotId(params.snapshotId);
+    }
+    if (params.captureId) {
+      setTwinInitialCaptureId(params.captureId);
+      setActiveCaptureId(params.captureId);
+    }
+    setCurrentTab('twin');
+  }, [setActiveCaptureId, setSelectedSnapshotId]);
+
+  useEffect(() => {
+    const onNavEvent = (e: Event) => {
+      const custom = e as CustomEvent;
+      if (custom.detail) {
+        handleNavigateToTwin(custom.detail);
+      }
+    };
+    window.addEventListener('navigate-twin', onNavEvent);
+    return () => window.removeEventListener('navigate-twin', onNavEvent);
+  }, [handleNavigateToTwin]);
 
   const fetchSystemStatus = useCallback(async () => {
     setIsLoading(true);
@@ -51,7 +82,12 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-background text-gray-100 overflow-hidden font-sans">
-      <Sidebar currentTab={currentTab} onSelectTab={setCurrentTab} />
+      <Sidebar
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        isOpen={isNavDrawerOpen}
+        onClose={() => setIsNavDrawerOpen(false)}
+      />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
@@ -59,6 +95,8 @@ export const App: React.FC = () => {
           isLoading={isLoading}
           error={error}
           onRefresh={fetchSystemStatus}
+          onToggleNavDrawer={() => setIsNavDrawerOpen((prev) => !prev)}
+          isNavDrawerOpen={isNavDrawerOpen}
         />
 
         <main className="flex-1 overflow-y-auto p-6 focus:outline-none" tabIndex={-1}>
@@ -102,13 +140,19 @@ export const App: React.FC = () => {
               onRefresh={fetchSystemStatus}
             />
           ) : currentTab === 'observatory' ? (
-            <ObservatoryView />
+            <ObservatoryView onNavigateToTwin={handleNavigateToTwin} />
           ) : currentTab === 'twin' ? (
-            <NetworkTwinView />
+            <NetworkTwinView
+              initialSnapshotId={twinInitialSnapshotId || selectedSnapshotId}
+              initialCaptureId={twinInitialCaptureId || activeCaptureId}
+              onNavigateToObservatory={() => {
+                setCurrentTab('observatory');
+              }}
+            />
           ) : currentTab === 'laboratory' ? (
             <ScenarioLaboratoryView />
           ) : currentTab === 'research' ? (
-            <SecurityTestingWorkbench />
+            <ProtocolResearchLabView />
           ) : currentTab === 'investigation' ? (
             <InvestigationWorkbench />
           ) : (
@@ -117,6 +161,14 @@ export const App: React.FC = () => {
         </main>
       </div>
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AnalysisProvider>
+      <AppContent />
+    </AnalysisProvider>
   );
 };
 

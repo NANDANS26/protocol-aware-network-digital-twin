@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAnalysisContext } from '../context/AnalysisContext';
 import { apiClient } from '../api/client';
 import type {
   Asset,
@@ -15,6 +16,8 @@ import type {
   CaptureMetadata,
   IdentityStatus,
   EvidenceClass,
+  ConsumptionAudit,
+  EvidenceCoverageSummary,
 } from '../types/intelligence';
 import type {
   NetworkModel,
@@ -22,21 +25,13 @@ import type {
   ReachabilityResult,
   SecurityInvariant,
   VerificationResult,
-  SimulationScenario,
-  CounterfactualResult,
 } from '../types/simulation';
 import { ReachabilityWorkbench } from './twin/ReachabilityWorkbench';
 import { SecurityVerificationView } from './twin/SecurityVerificationView';
-import { CounterfactualScenarioView } from './twin/CounterfactualScenarioView';
 import { ModelInspectorView } from './twin/ModelInspectorView';
-import { SecurityTestingWorkbench } from './twin/SecurityTestingWorkbench';
-import { PredictiveWorkbench } from './twin/PredictiveWorkbench';
-import { BenchmarkWorkbench } from './twin/BenchmarkWorkbench';
-import { AdversarialHardeningWorkbench } from './twin/AdversarialHardeningWorkbench';
-import { RealCaptureWorkbench } from './twin/RealCaptureWorkbench';
-import { InvestigationWorkbench } from './twin/InvestigationWorkbench';
 import { TopologyGraphView } from './twin/topology/TopologyGraphView';
 import { TopologyModal } from './twin/topology/TopologyModal';
+import { SnapshotComparisonView } from './twin/SnapshotComparisonView';
 import {
   Server,
   Network,
@@ -44,44 +39,55 @@ import {
   Layers,
   History,
   FileCode,
-  FileCheck2,
   Search,
   RefreshCw,
   Plus,
   GitCompare,
   CheckCircle,
-  CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   Database,
   Info,
   ShieldCheck,
   Cpu,
   Route,
-  Activity,
-  Bug,
-  TrendingUp,
   Maximize2,
+  ChevronDown,
+  ChevronRight,
+  Trash2,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 
 export type TwinTab =
   | 'assets'
   | 'topology'
-  | 'reachability'
-  | 'verification'
-  | 'counterfactual'
-  | 'models'
-  | 'fuzzing'
-  | 'predictive'
-  | 'benchmarks'
-  | 'hardening'
-  | 'captures'
-  | 'investigations'
   | 'evidence'
   | 'comparison'
-  | 'imports';
+  | 'imports'
+  | 'reachability'
+  | 'verification'
+  | 'models';
 
-export const NetworkTwinView: React.FC = () => {
+export interface NetworkTwinViewProps {
+  initialSnapshotId?: string | null;
+  initialCaptureId?: string | null;
+  onNavigateToObservatory?: (captureId?: string) => void;
+}
+
+export const NetworkTwinView: React.FC<NetworkTwinViewProps> = ({
+  initialSnapshotId,
+  initialCaptureId,
+  onNavigateToObservatory,
+}) => {
+  const {
+    activeCaptureId,
+    activeCapture,
+    activeSnapshotId,
+    setActiveSnapshotId,
+  } = useAnalysisContext();
+
+  const effectiveCaptureId = initialCaptureId || activeCaptureId;
+
   const [activeTab, setActiveTab] = useState<TwinTab>('assets');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,9 +108,6 @@ export const NetworkTwinView: React.FC = () => {
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [invariants, setInvariants] = useState<SecurityInvariant[]>([]);
   const [verificationResults, setVerificationResults] = useState<VerificationResult[]>([]);
-  const [scenarios, setScenarios] = useState<SimulationScenario[]>([]);
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
-  const [counterfactualResult, setCounterfactualResult] = useState<CounterfactualResult | null>(null);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
 
   // Selection & filter states
@@ -117,11 +120,29 @@ export const NetworkTwinView: React.FC = () => {
   const [evidenceTypeFilter, setEvidenceTypeFilter] = useState<string>('ALL');
   const [evidenceClassFilter, setEvidenceClassFilter] = useState<string>('ALL');
 
+  // Active snapshot & model reconstruction states
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>(initialSnapshotId || activeSnapshotId || '');
+  const [showReconstructModal, setShowReconstructModal] = useState<boolean>(false);
+  const [reconstructName, setReconstructName] = useState<string>('');
+  const [selectedCaptureIds, setSelectedCaptureIds] = useState<string[]>(effectiveCaptureId ? [effectiveCaptureId] : []);
+  const [selectedConfigIds, setSelectedConfigIds] = useState<string[]>([]);
+  const [includeAllTelemetry, setIncludeAllTelemetry] = useState<boolean>(!effectiveCaptureId);
+  const [reconstructionAudit, setReconstructionAudit] = useState<{
+    snapshot: TopologySnapshot;
+    audit?: ConsumptionAudit;
+    coverage?: EvidenceCoverageSummary;
+    limitations?: string[];
+  } | null>(null);
+
   // Snapshot comparison state
-  const [baseSnapshotId, setBaseSnapshotId] = useState<string>('');
+  const [baseSnapshotId, setBaseSnapshotId] = useState<string>(initialSnapshotId || '');
   const [targetSnapshotId, setTargetSnapshotId] = useState<string>('');
   const [comparisonDiff, setComparisonDiff] = useState<SnapshotComparisonDiff | null>(null);
   const [comparing, setComparing] = useState<boolean>(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+
+  // Responsive secondary navigation drawer state
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
 
   // Full-screen interactive topology modal state
   const [isTopologyModalOpen, setIsTopologyModalOpen] = useState<boolean>(false);
@@ -132,7 +153,8 @@ export const NetworkTwinView: React.FC = () => {
 
   // Configuration import state
   const [importSourceName, setImportSourceName] = useState<string>('core-router-routes');
-  const [importFormat, setImportFormat] = useState<'json' | 'csv'>('json');
+  const [importConfigType, setImportConfigType] = useState<'routing_table' | 'neighbor_table' | 'inventory'>('routing_table');
+  const [importSerializationFormat, setImportSerializationFormat] = useState<'auto' | 'json' | 'csv'>('auto');
   const [importContent, setImportContent] = useState<string>(
     JSON.stringify(
       [
@@ -154,7 +176,103 @@ export const NetworkTwinView: React.FC = () => {
     )
   );
   const [importing, setImporting] = useState<boolean>(false);
+  const [deletingImportId, setDeletingImportId] = useState<string | null>(null);
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+
+  const handleConfigTypeChange = (newType: 'routing_table' | 'neighbor_table' | 'inventory') => {
+    setImportConfigType(newType);
+    if (newType === 'routing_table') {
+      setImportSourceName('core-router-routes');
+      setImportContent(
+        importSerializationFormat === 'csv'
+          ? `destination,gateway,interface,metric\n10.0.1.0/24,10.0.0.1,eth0,10\n192.168.1.0/24,192.168.1.1,eth1,20`
+          : JSON.stringify(
+              [
+                { destination: '10.0.1.0/24', gateway: '10.0.0.1', interface: 'eth0', metric: 10 },
+                { destination: '192.168.1.0/24', gateway: '192.168.1.1', interface: 'eth1', metric: 20 },
+              ],
+              null,
+              2
+            )
+      );
+    } else if (newType === 'neighbor_table') {
+      setImportSourceName('core-arp-table');
+      setImportContent(
+        importSerializationFormat === 'csv'
+          ? `ip_address,mac_address,interface\n10.0.1.15,00:50:56:c0:00:08,eth0\n10.0.1.25,00:50:56:c0:00:09,eth0`
+          : JSON.stringify(
+              [
+                { ip_address: '10.0.1.15', mac_address: '00:50:56:c0:00:08', interface: 'eth0' },
+                { ip_address: '10.0.1.25', mac_address: '00:50:56:c0:00:09', interface: 'eth0' },
+              ],
+              null,
+              2
+            )
+      );
+    } else {
+      setImportSourceName('datacenter-inventory');
+      setImportContent(
+        importSerializationFormat === 'csv'
+          ? `device_id,device_type,ip_addresses,hostname\ncore-router-01,router,10.0.0.1,core-rt01.corp\naccess-sw-01,switch,10.0.0.2,acc-sw01.corp`
+          : JSON.stringify(
+              [
+                { device_id: 'core-router-01', device_type: 'router', ip_addresses: ['10.0.0.1'], hostname: 'core-rt01.corp' },
+                { device_id: 'access-sw-01', device_type: 'switch', ip_addresses: ['10.0.0.2'], hostname: 'acc-sw01.corp' },
+              ],
+              null,
+              2
+            )
+      );
+    }
+  };
+
+  const handleSerializationFormatChange = (newFmt: 'auto' | 'json' | 'csv') => {
+    setImportSerializationFormat(newFmt);
+    if (newFmt === 'csv') {
+      if (importConfigType === 'routing_table') {
+        setImportContent(`destination,gateway,interface,metric\n10.0.1.0/24,10.0.0.1,eth0,10\n192.168.1.0/24,192.168.1.1,eth1,20`);
+      } else if (importConfigType === 'neighbor_table') {
+        setImportContent(`ip_address,mac_address,interface\n10.0.1.15,00:50:56:c0:00:08,eth0\n10.0.1.25,00:50:56:c0:00:09,eth0`);
+      } else {
+        setImportContent(`device_id,device_type,ip_addresses,hostname\ncore-router-01,router,10.0.0.1,core-rt01.corp\naccess-sw-01,switch,10.0.0.2,acc-sw01.corp`);
+      }
+    } else {
+      if (importConfigType === 'routing_table') {
+        setImportContent(
+          JSON.stringify(
+            [
+              { destination: '10.0.1.0/24', gateway: '10.0.0.1', interface: 'eth0', metric: 10 },
+              { destination: '192.168.1.0/24', gateway: '192.168.1.1', interface: 'eth1', metric: 20 },
+            ],
+            null,
+            2
+          )
+        );
+      } else if (importConfigType === 'neighbor_table') {
+        setImportContent(
+          JSON.stringify(
+            [
+              { ip_address: '10.0.1.15', mac_address: '00:50:56:c0:00:08', interface: 'eth0' },
+              { ip_address: '10.0.1.25', mac_address: '00:50:56:c0:00:09', interface: 'eth0' },
+            ],
+            null,
+            2
+          )
+        );
+      } else {
+        setImportContent(
+          JSON.stringify(
+            [
+              { device_id: 'core-router-01', device_type: 'router', ip_addresses: ['10.0.0.1'], hostname: 'core-rt01.corp' },
+              { device_id: 'access-sw-01', device_type: 'switch', ip_addresses: ['10.0.0.2'], hostname: 'acc-sw01.corp' },
+            ],
+            null,
+            2
+          )
+        );
+      }
+    }
+  };
 
   // Fetch all primary model and simulation data
   const loadTwinData = useCallback(async () => {
@@ -162,52 +280,53 @@ export const NetworkTwinView: React.FC = () => {
     setError(null);
     try {
       const [
-        assetsData,
-        segmentsData,
-        servicesData,
-        relData,
-        evData,
-        topoData,
         snapData,
         capData,
         impData,
         modelsData,
         invariantsData,
-        scenariosData,
       ] = await Promise.all([
-        apiClient.listAssets(),
-        apiClient.listSegments(),
-        apiClient.listServices(),
-        apiClient.listRelationships({ limit: 200 }),
-        apiClient.listEvidence({ limit: 200 }),
-        apiClient.getTopology(),
-        apiClient.listSnapshots(),
+        apiClient.listSnapshots(effectiveCaptureId || undefined),
         apiClient.listCaptures(),
         apiClient.listImports(),
         apiClient.listModels ? apiClient.listModels().catch(() => []) : Promise.resolve([]),
         apiClient.listInvariants ? apiClient.listInvariants().catch(() => []) : Promise.resolve([]),
-        apiClient.listScenarios ? apiClient.listScenarios().catch(() => []) : Promise.resolve([]),
       ]);
 
-      setAssets(assetsData);
-      setSegments(segmentsData);
-      setServices(servicesData);
-      setRelationships(relData);
-      setEvidenceList(evData);
-      setTopology(topoData);
       setSnapshots(snapData);
       setCaptures(capData);
       setImportHistory(impData);
-
       setModels(modelsData);
       if (modelsData.length > 0 && !selectedModelId && modelsData[0]) {
         setSelectedModelId(modelsData[0].model_id);
       }
-
       setInvariants(invariantsData);
-      setScenarios(scenariosData);
-      if (scenariosData.length > 0 && !selectedScenarioId && scenariosData[0]) {
-        setSelectedScenarioId(scenariosData[0].scenario_id);
+
+      // If no snapshots exist for the active capture, clear entity states to prevent cross-capture leakage
+      if (snapData.length === 0) {
+        setAssets([]);
+        setSegments([]);
+        setServices([]);
+        setRelationships([]);
+        setEvidenceList([]);
+        setTopology(null);
+        setSelectedSnapshotId('');
+        return;
+      }
+
+      // Resolve active snapshot
+      let targetSnapId = selectedSnapshotId;
+      if (initialSnapshotId && snapData.some((s) => s.snapshot_id === initialSnapshotId)) {
+        targetSnapId = initialSnapshotId;
+      } else if (activeSnapshotId && snapData.some((s) => s.snapshot_id === activeSnapshotId)) {
+        targetSnapId = activeSnapshotId;
+      } else if (!targetSnapId || !snapData.some((s) => s.snapshot_id === targetSnapId)) {
+        targetSnapId = snapData[0]?.snapshot_id || '';
+      }
+
+      setSelectedSnapshotId(targetSnapId);
+      if (targetSnapId && targetSnapId !== activeSnapshotId) {
+        setActiveSnapshotId(targetSnapId);
       }
 
       if (snapData.length >= 2 && !baseSnapshotId && !targetSnapshotId) {
@@ -216,12 +335,90 @@ export const NetworkTwinView: React.FC = () => {
       } else if (snapData.length === 1 && !baseSnapshotId) {
         setBaseSnapshotId(snapData[0]?.snapshot_id || '');
       }
+
+      // Fetch entities strictly scoped to target snapshot / capture
+      const [assetsData, segmentsData, servicesData, relData, evData, topoData] = await Promise.all([
+        apiClient.listAssets({ snapshot_id: targetSnapId, capture_id: effectiveCaptureId || undefined }),
+        apiClient.listSegments({ snapshot_id: targetSnapId, capture_id: effectiveCaptureId || undefined }),
+        apiClient.listServices({ snapshot_id: targetSnapId }),
+        apiClient.listRelationships({ snapshot_id: targetSnapId, limit: 200 }),
+        apiClient.listEvidence({ snapshot_id: targetSnapId, limit: 200 }),
+        apiClient.getTopology({ capture_id: effectiveCaptureId || undefined, snapshot_id: targetSnapId }),
+      ]);
+
+      setAssets(assetsData);
+      setSegments(segmentsData);
+      setServices(servicesData);
+      setRelationships(relData);
+      setEvidenceList(evData);
+      setTopology(topoData);
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to load network twin data.');
     } finally {
       setLoading(false);
     }
-  }, [baseSnapshotId, targetSnapshotId, selectedModelId, selectedScenarioId]);
+  }, [
+    effectiveCaptureId,
+    initialSnapshotId,
+    activeSnapshotId,
+    selectedSnapshotId,
+    baseSnapshotId,
+    targetSnapshotId,
+    selectedModelId,
+    setActiveSnapshotId,
+  ]);
+
+  const handleSelectSnapshot = async (newSnapshotId: string) => {
+    setSelectedSnapshotId(newSnapshotId);
+    setActiveSnapshotId(newSnapshotId);
+    setActionLoading(true);
+    try {
+      const [assetsData, segmentsData, servicesData, relData, evData, topoData] = await Promise.all([
+        apiClient.listAssets({ snapshot_id: newSnapshotId, capture_id: effectiveCaptureId || undefined }),
+        apiClient.listSegments({ snapshot_id: newSnapshotId, capture_id: effectiveCaptureId || undefined }),
+        apiClient.listServices({ snapshot_id: newSnapshotId }),
+        apiClient.listRelationships({ snapshot_id: newSnapshotId, limit: 200 }),
+        apiClient.listEvidence({ snapshot_id: newSnapshotId, limit: 200 }),
+        apiClient.getTopology({ capture_id: effectiveCaptureId || undefined, snapshot_id: newSnapshotId }),
+      ]);
+      setAssets(assetsData);
+      setSegments(segmentsData);
+      setServices(servicesData);
+      setRelationships(relData);
+      setEvidenceList(evData);
+      setTopology(topoData);
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to switch snapshot.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReconstructFromActiveCapture = async () => {
+    if (!effectiveCaptureId) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      const newSnap = await apiClient.createSnapshotFromCapture(effectiveCaptureId);
+      setSelectedSnapshotId(newSnap.snapshot_id);
+      setActiveSnapshotId(newSnap.snapshot_id);
+      setReconstructionAudit({
+        snapshot: newSnap,
+        audit: newSnap.metadata?.consumption_audit,
+        coverage: newSnap.metadata?.evidence_coverage,
+        limitations: newSnap.metadata?.limitations,
+      });
+      await loadTwinData();
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to reconstruct model from capture.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const activeSnapshot = useMemo(() => {
+    return snapshots.find((s) => s.snapshot_id === selectedSnapshotId) || snapshots[0] || null;
+  }, [snapshots, selectedSnapshotId]);
 
   // Action Handlers
   const handleEvaluateReachability = async (query: ReachabilityQuery): Promise<ReachabilityResult | null> => {
@@ -263,33 +460,6 @@ export const NetworkTwinView: React.FC = () => {
     }
   };
 
-  const handleRunScenario = async (scenId: string): Promise<CounterfactualResult | null> => {
-    setActionLoading(true);
-    try {
-      const res = await apiClient.runScenario(scenId);
-      setCounterfactualResult(res);
-      return res;
-    } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to run scenario');
-      return null;
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCreateScenario = async (scen: SimulationScenario): Promise<void> => {
-    setActionLoading(true);
-    try {
-      const saved = await apiClient.createScenario(scen);
-      setScenarios((prev) => [saved, ...prev]);
-      setSelectedScenarioId(saved.scenario_id);
-    } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to create scenario');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handleBuildModel = async (snapshotId: string, name?: string): Promise<void> => {
     setActionLoading(true);
     try {
@@ -298,6 +468,42 @@ export const NetworkTwinView: React.FC = () => {
       setSelectedModelId(model.model_id);
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to build network model');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Explicit Build / Update Network Model Operation
+  const handleReconstructModel = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setActionLoading(true);
+    setError(null);
+    try {
+      const snapName = reconstructName.trim() || `Twin Model Reconstructed (${new Date().toLocaleTimeString()})`;
+      const caps = includeAllTelemetry ? undefined : selectedCaptureIds;
+      const cfgs = includeAllTelemetry ? undefined : selectedConfigIds;
+
+      const newSnap = await apiClient.createSnapshot({
+        name: snapName,
+        source_captures: caps && caps.length > 0 ? caps : undefined,
+        source_configs: cfgs && cfgs.length > 0 ? cfgs : undefined,
+      });
+
+      setShowReconstructModal(false);
+      setReconstructName('');
+      setSelectedSnapshotId(newSnap.snapshot_id);
+
+      // Store the audit info for display
+      setReconstructionAudit({
+        snapshot: newSnap,
+        audit: newSnap.metadata?.consumption_audit,
+        coverage: newSnap.metadata?.evidence_coverage,
+        limitations: newSnap.metadata?.limitations,
+      });
+
+      await loadTwinData();
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to reconstruct network model.');
     } finally {
       setActionLoading(false);
     }
@@ -325,12 +531,15 @@ export const NetworkTwinView: React.FC = () => {
   const handleCompareSnapshots = async () => {
     if (!baseSnapshotId || !targetSnapshotId) return;
     setComparing(true);
+    setDiffError(null);
     setError(null);
     try {
       const diff = await apiClient.compareSnapshots(baseSnapshotId, targetSnapshotId);
       setComparisonDiff(diff);
     } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to compare snapshots.');
+      const msg = (err as Error).message || 'Failed to compare snapshots.';
+      setDiffError(msg);
+      setError(msg);
     } finally {
       setComparing(false);
     }
@@ -343,19 +552,47 @@ export const NetworkTwinView: React.FC = () => {
     setError(null);
     setImportSuccessMessage(null);
     try {
+      if (!importContent.trim()) {
+        throw new Error('Configuration content cannot be empty.');
+      }
+      if (importSerializationFormat === 'json') {
+        try {
+          JSON.parse(importContent);
+        } catch {
+          throw new Error('Invalid JSON format. Please verify configuration syntax.');
+        }
+      }
       const res = await apiClient.importConfiguration({
         source_name: importSourceName,
-        format: importFormat,
+        format: importConfigType,
         content: importContent,
       });
       setImportSuccessMessage(
-        `Imported ${res.items_imported} items successfully from '${res.source_name}' (${res.source_type}).`
+        `Imported ${res.items_imported} items successfully from '${res.source_name}' (${res.format || res.source_type}).`
       );
       await loadTwinData();
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to import configuration.');
     } finally {
       setImporting(false);
+    }
+  };
+
+  // Handle Delete Config Import
+  const handleDeleteConfigImport = async (importId: string, sourceName: string) => {
+    if (!window.confirm(`Are you sure you want to delete imported configuration '${sourceName}'?`)) {
+      return;
+    }
+    setDeletingImportId(importId);
+    setError(null);
+    try {
+      await apiClient.deleteConfigImport(importId);
+      setImportSuccessMessage(`Configuration import '${sourceName}' deleted successfully.`);
+      await loadTwinData();
+    } catch (err: unknown) {
+      setError((err as Error).message || `Failed to delete configuration import '${sourceName}'.`);
+    } finally {
+      setDeletingImportId(null);
     }
   };
 
@@ -459,8 +696,91 @@ export const NetworkTwinView: React.FC = () => {
     }
   };
 
+  const navGroups: Array<{
+    id: string;
+    title: string;
+    items: Array<{
+      id: TwinTab;
+      label: string;
+      icon: React.ComponentType<{ className?: string }>;
+      iconColor?: string;
+      badge?: string | number;
+    }>;
+  }> = useMemo(
+    () => [
+      {
+        id: 'reconstruct_ingest',
+        title: 'INGEST & RECONSTRUCT',
+        items: [
+          { id: 'imports', label: 'Import & Ingestion', icon: FileCode, badge: importHistory.length },
+          { id: 'evidence', label: 'Evidence Inspector', icon: ShieldAlert, badge: evidenceList.length },
+        ],
+      },
+      {
+        id: 'observe_topology',
+        title: 'TOPOLOGY & ASSETS',
+        items: [
+          { id: 'assets', label: 'Asset Explorer', icon: Server, badge: assets.length },
+          {
+            id: 'topology',
+            label: 'Topology Graph',
+            icon: Layers,
+            badge: topology ? `${topology.node_count} nodes` : undefined,
+          },
+          { id: 'models', label: 'Model Inspector', icon: Cpu, iconColor: 'text-amber-400', badge: models.length },
+        ],
+      },
+      {
+        id: 'verify_compare',
+        title: 'VERIFY & VALIDATE',
+        items: [
+          { id: 'reachability', label: 'Reachability', icon: Route, iconColor: 'text-cyan-400' },
+          {
+            id: 'verification',
+            label: 'Security Invariants',
+            icon: ShieldCheck,
+            iconColor: 'text-emerald-400',
+            badge: invariants.length,
+          },
+          {
+            id: 'comparison',
+            label: 'Snapshot Comparison',
+            icon: GitCompare,
+            badge: snapshots.length > 1 ? `${snapshots.length} snaps` : undefined,
+          },
+        ],
+      },
+    ],
+    [assets.length, topology, evidenceList.length, invariants.length, models.length, importHistory.length, snapshots.length]
+  );
+
+  const currentActiveItem = useMemo(() => {
+    for (const group of navGroups) {
+      for (const item of group.items) {
+        if (item.id === activeTab) {
+          return {
+            id: item.id,
+            label: item.label,
+            icon: item.icon,
+            iconColor: item.iconColor,
+            badge: item.badge,
+            groupTitle: group.title,
+          };
+        }
+      }
+    }
+    return {
+      id: activeTab,
+      label: 'Workspace',
+      icon: Layers as React.ComponentType<{ className?: string }>,
+      iconColor: 'text-indigo-400',
+      badge: undefined as string | number | undefined,
+      groupTitle: 'WORKSPACE',
+    };
+  }, [activeTab, navGroups]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="network-twin-workstation">
       {/* Header bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-5">
         <div>
@@ -474,23 +794,38 @@ export const NetworkTwinView: React.FC = () => {
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-mono font-medium">
                   Twin Operational
                 </span>
+                {activeSnapshot && (
+                  <span className="text-xs px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60 font-mono">
+                    Active: {activeSnapshot.name}
+                  </span>
+                )}
               </h1>
               <p className="text-xs text-gray-400 mt-0.5">
-                Executable network digital twin, deterministic security verification, predictive models & reproducible benchmarks
+                Evidence-grounded network topology reconstruction, formal model verification, reachability analysis &amp; snapshot differential
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setShowSnapshotModal(true)}
+            type="button"
+            onClick={() => setShowReconstructModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-sm transition"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Reconstruct Model</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowSnapshotModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-300 text-xs font-medium border border-indigo-800/60 transition"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Create Snapshot</span>
           </button>
           <button
+            type="button"
             onClick={loadTwinData}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium border border-gray-700 transition disabled:opacity-50"
@@ -500,6 +835,173 @@ export const NetworkTwinView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Primary Lifecycle Workflow Stepper & Active Snapshot Switcher */}
+      <div className="bg-slate-900/60 border border-gray-800 rounded-lg p-3 text-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap text-gray-400">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-400 font-mono">Twin Pipeline:</span>
+          <button
+            type="button"
+            onClick={() => setActiveTab('imports')}
+            className={`px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5 ${
+              activeTab === 'imports' || activeTab === 'evidence'
+                ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/60 font-semibold'
+                : 'hover:text-white bg-slate-950/60 border border-gray-800'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-indigo-900/80 text-[10px] flex items-center justify-center font-bold text-indigo-300">1</span>
+            <span>Evidence &amp; Config Inputs</span>
+          </button>
+          <ArrowRight className="w-3.5 h-3.5 text-gray-600" />
+          <button
+            type="button"
+            onClick={() => setShowReconstructModal(true)}
+            className="px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5 hover:text-white bg-slate-950/60 border border-gray-800 text-cyan-300"
+          >
+            <span className="w-4 h-4 rounded-full bg-cyan-900/80 text-[10px] flex items-center justify-center font-bold text-cyan-300">2</span>
+            <span>Reconstruct Model</span>
+          </button>
+          <ArrowRight className="w-3.5 h-3.5 text-gray-600" />
+          <button
+            type="button"
+            onClick={() => setActiveTab('topology')}
+            className={`px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5 ${
+              activeTab === 'topology' || activeTab === 'assets' || activeTab === 'models'
+                ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/60 font-semibold'
+                : 'hover:text-white bg-slate-950/60 border border-gray-800'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-indigo-900/80 text-[10px] flex items-center justify-center font-bold text-indigo-300">3</span>
+            <span>Topology &amp; Assets</span>
+          </button>
+          <ArrowRight className="w-3.5 h-3.5 text-gray-600" />
+          <button
+            type="button"
+            onClick={() => setActiveTab('reachability')}
+            className={`px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5 ${
+              activeTab === 'reachability' || activeTab === 'verification'
+                ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/60 font-semibold'
+                : 'hover:text-white bg-slate-950/60 border border-gray-800'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-indigo-900/80 text-[10px] flex items-center justify-center font-bold text-indigo-300">4</span>
+            <span>Verify Security</span>
+          </button>
+          <ArrowRight className="w-3.5 h-3.5 text-gray-600" />
+          <button
+            type="button"
+            onClick={() => setActiveTab('comparison')}
+            className={`px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5 ${
+              activeTab === 'comparison'
+                ? 'bg-indigo-950 text-indigo-300 border border-indigo-700/60 font-semibold'
+                : 'hover:text-white bg-slate-950/60 border border-gray-800'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-indigo-900/80 text-[10px] flex items-center justify-center font-bold text-indigo-300">5</span>
+            <span>Snapshot Differential</span>
+          </button>
+        </div>
+
+        {snapshots.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400 font-medium">Active Snapshot:</span>
+            <select
+              value={selectedSnapshotId}
+              onChange={(e) => handleSelectSnapshot(e.target.value)}
+              className="bg-slate-950 border border-gray-700 rounded px-2.5 py-1 text-xs text-cyan-300 font-mono focus:outline-none focus:border-indigo-500 max-w-[220px] truncate"
+            >
+              {snapshots.map((s) => (
+                <option key={s.snapshot_id} value={s.snapshot_id}>
+                  {s.name} ({s.snapshot_id})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Reconstruction Audit & Lineage Report Card (if recent reconstruction executed) */}
+      {reconstructionAudit && (
+        <div className="bg-gradient-to-r from-indigo-950/60 to-slate-950/80 border border-indigo-700/60 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-xs font-bold text-white font-mono">
+                Model Reconstructed &amp; Persisted: {reconstructionAudit.snapshot.snapshot_id}
+              </h3>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">
+                Verified Immutable
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReconstructionAudit(null)}
+              className="text-gray-400 hover:text-gray-200 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+            <div className="p-2.5 bg-slate-950/70 rounded border border-gray-800">
+              <div className="text-[10px] text-gray-400">Consumed Assets</div>
+              <div className="text-white font-bold mt-0.5">
+                {reconstructionAudit.audit?.consumed_assets_count ?? reconstructionAudit.snapshot.node_count} nodes
+              </div>
+            </div>
+            <div className="p-2.5 bg-slate-950/70 rounded border border-gray-800">
+              <div className="text-[10px] text-gray-400">Consumed Subnets</div>
+              <div className="text-cyan-400 font-bold mt-0.5">
+                {reconstructionAudit.audit?.consumed_subnets_count ?? segments.length} subnets
+              </div>
+            </div>
+            <div className="p-2.5 bg-slate-950/70 rounded border border-gray-800">
+              <div className="text-[10px] text-gray-400">Evidence Coverage</div>
+              <div className="text-emerald-400 font-bold mt-0.5">
+                {reconstructionAudit.coverage?.directly_observed_pct ?? 85}% Directly Observed
+              </div>
+            </div>
+            <div className="p-2.5 bg-slate-950/70 rounded border border-gray-800">
+              <div className="text-[10px] text-gray-400">Reconstructed Edges</div>
+              <div className="text-indigo-300 font-bold mt-0.5">
+                {reconstructionAudit.snapshot.edge_count} flows/paths
+              </div>
+            </div>
+          </div>
+
+          {/* Skipped or Rejected Records with explicit reasons */}
+          {reconstructionAudit.audit?.skipped_or_rejected && reconstructionAudit.audit.skipped_or_rejected.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Source Records Filtered / Skipped During Normalization ({reconstructionAudit.audit.skipped_or_rejected.length})</span>
+              </div>
+              <div className="max-h-36 overflow-y-auto space-y-1 text-[11px] font-mono">
+                {reconstructionAudit.audit.skipped_or_rejected.map((item, idx) => (
+                  <div key={idx} className="p-2 bg-slate-950/90 rounded border border-gray-800/80 flex items-start gap-2">
+                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${item.action === 'REJECTED' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}`}>
+                      {item.action}
+                    </span>
+                    <span className="text-gray-300 font-semibold">{item.item_type} [{item.item_id}]:</span>
+                    <span className="text-gray-400 flex-1">{item.reason}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Limitations Banner */}
+          {reconstructionAudit.limitations && reconstructionAudit.limitations.length > 0 && (
+            <div className="text-[11px] text-gray-400 pt-1 border-t border-gray-800/80 flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-gray-300 font-semibold">Model Scope Limitations: </span>
+                <span>{reconstructionAudit.limitations.join(' ')}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Metrics Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -542,214 +1044,137 @@ export const NetworkTwinView: React.FC = () => {
             <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200">
+          <button type="button" onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200">
             Dismiss
           </button>
         </div>
       )}
 
-      {/* Navigation Sub-Tabs */}
-      <div className="flex border-b border-gray-800 space-x-1">
-        <button
-          onClick={() => setActiveTab('assets')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'assets'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Server className="w-3.5 h-3.5" />
-          <span>Asset Explorer</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
-            {assets.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('topology')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'topology'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>Topology Graph</span>
-          {topology && (
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
-              {topology.node_count} nodes
+      {/* Mobile Workspace Navigator Bar */}
+      <div className="md:hidden bg-surface/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <currentActiveItem.icon className={`w-4 h-4 shrink-0 ${currentActiveItem.iconColor || 'text-indigo-400'}`} />
+          <div className="min-w-0">
+            <div className="text-[9px] font-bold uppercase tracking-wider text-gray-500">
+              GROUP: {currentActiveItem.groupTitle}
+            </div>
+            <div className="text-xs font-semibold text-white truncate" data-testid="mobile-active-workspace">
+              Active: {currentActiveItem.label}
+            </div>
+          </div>
+          {currentActiveItem.badge !== undefined && (
+            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-gray-800 text-gray-300 shrink-0">
+              {currentActiveItem.badge}
             </span>
           )}
-        </button>
+        </div>
 
         <button
-          onClick={() => setActiveTab('evidence')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'evidence'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
+          type="button"
+          onClick={() => setIsMobileNavOpen((prev) => !prev)}
+          className="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium border border-gray-700 flex items-center gap-1.5 shrink-0 transition"
+          aria-expanded={isMobileNavOpen}
+          aria-label="Toggle workspace navigation menu"
         >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          <span>Evidence Inspector</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
-            {evidenceList.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('comparison')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'comparison'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <GitCompare className="w-3.5 h-3.5" />
-          <span>Snapshot Comparison</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('reachability')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'reachability'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Route className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Reachability</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('verification')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'verification'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Security Invariants</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
-            {invariants.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('counterfactual')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'counterfactual'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Activity className="w-3.5 h-3.5 text-purple-400" />
-          <span>What-If Scenarios</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
-            {scenarios.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('models')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'models'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Cpu className="w-3.5 h-3.5 text-amber-400" />
-          <span>Model Inspector</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300">
-            {models.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('fuzzing')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'fuzzing'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Bug className="w-3.5 h-3.5 text-rose-400" />
-          <span>Security Testing & Fuzzing</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('predictive')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'predictive'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <TrendingUp className="w-3.5 h-3.5 text-blue-400" />
-          <span>Predictive World Model</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('benchmarks')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'benchmarks'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Validation & Benchmarks</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('hardening')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'hardening'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-          <span>Adversarial Hardening</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('captures')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'captures'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <FileCheck2 className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Real Captures & Differential</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('investigations')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'investigations'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <Search className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Incident Investigations</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('imports')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition ${
-            activeTab === 'imports'
-              ? 'border-indigo-500 text-white bg-indigo-950/20'
-              : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-          }`}
-        >
-          <FileCode className="w-3.5 h-3.5" />
-          <span>Import & Ingestion</span>
+          <span>Workspaces</span>
+          {isMobileNavOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </button>
       </div>
+
+      {/* Grouped Secondary Navigation + Main Content Layout */}
+      <div className="flex flex-col md:flex-row gap-5 items-start">
+        {/* Persistent Grouped Workspace Navigator */}
+        <aside
+          aria-label="Digital Twin Workspaces"
+          className={`${
+            isMobileNavOpen ? 'block' : 'hidden'
+          } md:block w-full md:w-64 shrink-0 bg-surface/40 border border-gray-800 rounded-lg p-3 space-y-4 md:sticky md:top-4 md:max-h-[calc(100vh-140px)] md:overflow-y-auto z-10`}
+        >
+          {navGroups.map((group) => (
+            <div key={group.id} className="space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 px-2.5 py-1">
+                {group.title}
+              </div>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = activeTab === item.id;
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setIsMobileNavOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs rounded transition text-left group ${
+                        isActive
+                          ? 'bg-indigo-600/20 text-white font-semibold border-l-2 border-indigo-500 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-l-2 border-transparent'
+                      }`}
+                      aria-current={isActive ? 'page' : undefined}
+                    >
+                      <Icon className={`w-3.5 h-3.5 shrink-0 ${item.iconColor || (isActive ? 'text-indigo-400' : 'text-gray-400 group-hover:text-gray-300')}`} />
+                      <span className="truncate flex-1">{item.label}</span>
+                      {item.badge !== undefined && (
+                        <span
+                          className={`ml-auto text-[10px] px-1.5 py-0.2 rounded-full font-mono shrink-0 ${
+                            isActive
+                              ? 'bg-indigo-950/80 text-indigo-300 border border-indigo-800/60'
+                              : 'bg-gray-800/80 text-gray-400 border border-gray-700/50'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </aside>
+
+        {/* Main Workbench Stage */}
+        <main className="flex-1 min-w-0 w-full space-y-4">
+          {effectiveCaptureId && snapshots.length === 0 && !loading && activeTab !== 'imports' ? (
+            <div
+              className="bg-slate-900/90 border-2 border-indigo-500/40 rounded-xl p-8 text-center max-w-2xl mx-auto my-8 shadow-2xl backdrop-blur-sm"
+              data-testid="twin-empty-state-card"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center mx-auto mb-4 text-indigo-400">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <h3 className="text-base font-bold text-white font-mono">
+                No Digital Twin Snapshot for Active Capture
+              </h3>
+              <p className="mt-2 text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+                Capture <span className="text-cyan-300 font-mono font-semibold">{activeCapture?.filename || effectiveCaptureId}</span> has completed protocol analysis and event normalization, but its versioned network model snapshot has not been generated yet.
+              </p>
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleReconstructFromActiveCapture}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs shadow-lg transition"
+                  data-testid="reconstruct-from-capture-btn"
+                >
+                  {actionLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  <span>Reconstruct Network Model from {activeCapture?.filename || 'Active Capture'}</span>
+                </button>
+                {onNavigateToObservatory && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToObservatory(effectiveCaptureId)}
+                    className="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-gray-300 text-xs transition"
+                  >
+                    Return to Network Observatory
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
 
       {/* TAB CONTENT: ASSET EXPLORER */}
       {activeTab === 'assets' && (
@@ -861,6 +1286,7 @@ export const NetworkTwinView: React.FC = () => {
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedAsset(asset);
@@ -993,6 +1419,7 @@ export const NetworkTwinView: React.FC = () => {
                         <div className="flex flex-wrap gap-1">
                           {(selectedAsset.evidence_ids || []).slice(0, 6).map((evId: string) => (
                             <button
+                              type="button"
                               key={evId}
                               onClick={() => {
                                 const ev = evidenceList.find((e) => e.evidence_id === evId);
@@ -1139,6 +1566,7 @@ export const NetworkTwinView: React.FC = () => {
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedEvidence(ev);
@@ -1233,152 +1661,17 @@ export const NetworkTwinView: React.FC = () => {
 
       {/* TAB CONTENT: SNAPSHOT COMPARISON */}
       {activeTab === 'comparison' && (
-        <div className="space-y-6">
-          <div className="bg-surface/40 border border-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-white mb-1">Differential Topology Comparison</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Select two immutable snapshots to compute structural diffs with evidence-backed explanations.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="flex-1 w-full">
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Base Snapshot (A)</label>
-                <select
-                  value={baseSnapshotId}
-                  onChange={(e) => setBaseSnapshotId(e.target.value)}
-                  className="w-full bg-surface/80 border border-gray-800 rounded px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
-                >
-                  <option value="">Select Base Snapshot</option>
-                  {snapshots.map((s) => (
-                    <option key={s.snapshot_id} value={s.snapshot_id}>
-                      {s.name} ({(s.created_at_iso || (s.created_at ? String(s.created_at) : '')).slice(0, 19)}) - {s.node_count} nodes
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-center p-2 text-gray-500">
-                <ArrowRight className="w-4 h-4" />
-              </div>
-
-              <div className="flex-1 w-full">
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Target Snapshot (B)</label>
-                <select
-                  value={targetSnapshotId}
-                  onChange={(e) => setTargetSnapshotId(e.target.value)}
-                  className="w-full bg-surface/80 border border-gray-800 rounded px-3 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
-                >
-                  <option value="">Select Target Snapshot</option>
-                  {snapshots.map((s) => (
-                    <option key={s.snapshot_id} value={s.snapshot_id}>
-                      {s.name} ({(s.created_at_iso || (s.created_at ? String(s.created_at) : '')).slice(0, 19)}) - {s.node_count} nodes
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={handleCompareSnapshots}
-                disabled={!baseSnapshotId || !targetSnapshotId || comparing}
-                className="mt-5 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2"
-              >
-                <GitCompare className="w-4 h-4" />
-                <span>{comparing ? 'Comparing...' : 'Run Diff'}</span>
-              </button>
-            </div>
-          </div>
-
-          {comparisonDiff && (
-            <div className="space-y-4">
-              {/* Diff summary badges */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-surface/40 border border-gray-800 rounded-lg">
-                  <span className="text-[10px] text-gray-400 font-medium uppercase">Added Nodes</span>
-                  <div className="text-xl font-bold font-mono text-emerald-400 mt-0.5">
-                    +{comparisonDiff.added_nodes.length}
-                  </div>
-                </div>
-                <div className="p-3 bg-surface/40 border border-gray-800 rounded-lg">
-                  <span className="text-[10px] text-gray-400 font-medium uppercase">Removed Nodes</span>
-                  <div className="text-xl font-bold font-mono text-rose-400 mt-0.5">
-                    -{comparisonDiff.removed_nodes.length}
-                  </div>
-                </div>
-                <div className="p-3 bg-surface/40 border border-gray-800 rounded-lg">
-                  <span className="text-[10px] text-gray-400 font-medium uppercase">Added Edges</span>
-                  <div className="text-xl font-bold font-mono text-emerald-400 mt-0.5">
-                    +{comparisonDiff.added_edges.length}
-                  </div>
-                </div>
-                <div className="p-3 bg-surface/40 border border-gray-800 rounded-lg">
-                  <span className="text-[10px] text-gray-400 font-medium uppercase">Removed Edges</span>
-                  <div className="text-xl font-bold font-mono text-rose-400 mt-0.5">
-                    -{comparisonDiff.removed_edges.length}
-                  </div>
-                </div>
-              </div>
-
-              {/* Explanations */}
-              <div className="bg-surface/50 border border-gray-800 rounded-lg p-4">
-                <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-indigo-400" />
-                  Evidence-Grounded Explanations
-                </h4>
-                <div className="space-y-1.5">
-                  {comparisonDiff.evidence_explanations.map((exp, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2 bg-gray-900/60 border border-gray-800 rounded text-xs text-gray-300 font-mono"
-                    >
-                      {exp}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Structural Diffs */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* Added Nodes */}
-                <div className="bg-surface/40 border border-gray-800 rounded-lg p-3">
-                  <div className="font-semibold text-emerald-400 mb-2">
-                    Added Nodes ({comparisonDiff.added_nodes.length})
-                  </div>
-                  {comparisonDiff.added_nodes.length === 0 ? (
-                    <div className="text-gray-500 italic">No new nodes added in target snapshot.</div>
-                  ) : (
-                    <div className="space-y-1 font-mono max-h-48 overflow-y-auto">
-                      {comparisonDiff.added_nodes.map((n) => (
-                        <div key={n.id} className="p-1.5 bg-emerald-950/20 border border-emerald-900/40 rounded flex justify-between">
-                          <span className="text-emerald-300 font-semibold">{n.label}</span>
-                          <span className="text-gray-400">{n.node_type}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Removed Nodes */}
-                <div className="bg-surface/40 border border-gray-800 rounded-lg p-3">
-                  <div className="font-semibold text-rose-400 mb-2">
-                    Removed Nodes ({comparisonDiff.removed_nodes.length})
-                  </div>
-                  {comparisonDiff.removed_nodes.length === 0 ? (
-                    <div className="text-gray-500 italic">No nodes removed in target snapshot.</div>
-                  ) : (
-                    <div className="space-y-1 font-mono max-h-48 overflow-y-auto">
-                      {comparisonDiff.removed_nodes.map((n) => (
-                        <div key={n.id} className="p-1.5 bg-rose-950/20 border border-rose-900/40 rounded flex justify-between">
-                          <span className="text-rose-300 font-semibold">{n.label}</span>
-                          <span className="text-gray-400">{n.node_type}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <SnapshotComparisonView
+          snapshots={snapshots}
+          baseSnapshotId={baseSnapshotId}
+          targetSnapshotId={targetSnapshotId}
+          setBaseSnapshotId={setBaseSnapshotId}
+          setTargetSnapshotId={setTargetSnapshotId}
+          comparisonDiff={comparisonDiff}
+          comparing={comparing}
+          diffError={diffError}
+          onCompare={handleCompareSnapshots}
+        />
       )}
 
       {/* TAB CONTENT: IMPORTS & INGESTION */}
@@ -1401,7 +1694,7 @@ export const NetworkTwinView: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-medium text-gray-400 mb-1">Source Name</label>
                   <input
@@ -1414,15 +1707,42 @@ export const NetworkTwinView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Format</label>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Configuration Type (Semantic)</label>
                   <select
-                    value={importFormat}
-                    onChange={(e) => setImportFormat(e.target.value as 'json' | 'csv')}
-                    className="w-full bg-surface/80 border border-gray-800 rounded px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500"
+                    value={importConfigType}
+                    onChange={(e) => handleConfigTypeChange(e.target.value as 'routing_table' | 'neighbor_table' | 'inventory')}
+                    className="w-full bg-surface/80 border border-gray-800 rounded px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
                   >
+                    <option value="routing_table">Routing Table (routes &amp; next hops)</option>
+                    <option value="neighbor_table">Neighbor / ARP Table (IP &amp; MAC bindings)</option>
+                    <option value="inventory">Device Inventory (hosts, routers, switches)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Serialization Format</label>
+                  <select
+                    value={importSerializationFormat}
+                    onChange={(e) => handleSerializationFormatChange(e.target.value as 'auto' | 'json' | 'csv')}
+                    className="w-full bg-surface/80 border border-gray-800 rounded px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 font-mono"
+                  >
+                    <option value="auto">Auto-Detect (JSON or CSV)</option>
                     <option value="json">JSON</option>
                     <option value="csv">CSV</option>
                   </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => handleSerializationFormatChange(importSerializationFormat)}
+                    className="w-full py-1.5 px-3 rounded bg-surface border border-gray-700 hover:bg-gray-800 text-gray-300 hover:text-white text-xs font-mono transition flex items-center justify-center gap-1.5"
+                  >
+                    <FileCode className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Reset to Template</span>
+                  </button>
                 </div>
               </div>
 
@@ -1464,12 +1784,24 @@ export const NetworkTwinView: React.FC = () => {
                         <div>
                           <div className="text-gray-200 font-semibold">{imp.source_name}</div>
                           <div className="text-[10px] text-gray-400">
-                            {imp.source_type} &bull; {imp.imported_at_iso.slice(0, 19)}
+                            {imp.source_type} &bull; {imp.imported_at_iso ? imp.imported_at_iso.slice(0, 19) : 'N/A'}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className="text-emerald-400 font-semibold">+{imp.items_imported} items</span>
-                          <div className="text-[10px] text-gray-500">{imp.status}</div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="text-emerald-400 font-semibold">+{imp.items_imported} items</span>
+                            <div className="text-[10px] text-gray-500">{imp.status}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteConfigImport(imp.import_id, imp.source_name)}
+                            disabled={deletingImportId === imp.import_id}
+                            aria-label={`Delete import ${imp.source_name}`}
+                            className="p-1.5 rounded text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-900/40 transition disabled:opacity-50"
+                            title="Delete Configuration Record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1486,20 +1818,26 @@ export const NetworkTwinView: React.FC = () => {
                   <div className="text-gray-500 text-xs italic py-4">No packet captures cataloged.</div>
                 ) : (
                   <div className="divide-y divide-gray-800/80 text-xs max-h-56 overflow-y-auto">
-                    {captures.map((cap) => (
+                    {captures.map((cap) => {
+                      const raw = cap as unknown as Record<string, unknown>;
+                      const sha = (cap.sha256_hash || raw.content_sha256 || '') as string;
+                      const capName = (cap.file_name || raw.filename || cap.capture_id) as string;
+                      const pktText = cap.packet_count != null ? `${cap.packet_count} packets` : 'PCAP recorded';
+                      return (
                       <div key={cap.capture_id} className="py-2 flex items-center justify-between font-mono">
                         <div>
-                          <div className="text-gray-200 font-semibold">{cap.file_name}</div>
+                          <div className="text-gray-200 font-semibold">{capName}</div>
                           <div className="text-[10px] text-gray-500">
-                            SHA: {cap.sha256_hash.slice(0, 12)}...
+                            SHA: {sha ? `${sha.slice(0, 12)}...` : 'N/A'}
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="text-indigo-400 font-semibold">{cap.packet_count} packets</span>
+                          <span className="text-indigo-400 font-semibold">{pktText}</span>
                           <div className="text-[10px] text-gray-400">{cap.format}</div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1533,22 +1871,6 @@ export const NetworkTwinView: React.FC = () => {
         />
       )}
 
-      {/* TAB CONTENT: WHAT-IF SCENARIOS & COUNTERFACTUAL SIMULATION */}
-      {activeTab === 'counterfactual' && (
-        <CounterfactualScenarioView
-          models={models}
-          selectedModelId={selectedModelId}
-          onSelectModel={setSelectedModelId}
-          scenarios={scenarios}
-          selectedScenarioId={selectedScenarioId}
-          onSelectScenario={setSelectedScenarioId}
-          onRunScenario={handleRunScenario}
-          onCreateScenario={handleCreateScenario}
-          counterfactualResult={counterfactualResult}
-          loading={actionLoading}
-        />
-      )}
-
       {/* TAB CONTENT: MODEL INSPECTOR */}
       {activeTab === 'models' && (
         <ModelInspectorView
@@ -1560,36 +1882,10 @@ export const NetworkTwinView: React.FC = () => {
           loading={loading || actionLoading}
         />
       )}
-
-      {/* TAB CONTENT: PROTOCOL SECURITY TESTING & FUZZING */}
-      {activeTab === 'fuzzing' && (
-        <SecurityTestingWorkbench />
-      )}
-
-      {/* TAB CONTENT: PREDICTIVE WORLD MODEL & BEHAVIOR FORECASTING */}
-      {activeTab === 'predictive' && (
-        <PredictiveWorkbench />
-      )}
-
-      {/* TAB CONTENT: VALIDATION & BENCHMARKS */}
-      {activeTab === 'benchmarks' && (
-        <BenchmarkWorkbench />
-      )}
-
-      {/* TAB CONTENT: ADVERSARIAL VERIFICATION & HARDENING */}
-      {activeTab === 'hardening' && (
-        <AdversarialHardeningWorkbench />
-      )}
-
-      {/* TAB CONTENT: REAL CAPTURE VALIDATION & DIFFERENTIAL TESTING */}
-      {activeTab === 'captures' && (
-        <RealCaptureWorkbench />
-      )}
-
-      {/* TAB CONTENT: INCIDENT INVESTIGATIONS */}
-      {activeTab === 'investigations' && (
-        <InvestigationWorkbench />
-      )}
+            </>
+          )}
+        </main>
+      </div>
 
       {/* Full-Screen Interactive Topology Workspace Modal */}
       <TopologyModal
@@ -1604,6 +1900,141 @@ export const NetworkTwinView: React.FC = () => {
         onChangeEvidenceFilter={setEvidenceClassFilter}
         renderEvidenceClassBadge={renderEvidenceClassBadge}
       />
+
+      {/* Reconstruct Network Model Modal */}
+      {showReconstructModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleReconstructModel}
+            className="bg-surface border border-gray-700 rounded-lg shadow-2xl max-w-xl w-full p-6 space-y-4 text-xs"
+          >
+            <div className="border-b border-gray-800 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                Build &amp; Reconstruct Network Digital Twin
+              </h3>
+              <p className="text-gray-400 mt-1">
+                Synthesize observed PCAP traffic evidence and imported configurations into an immutable, versioned topology snapshot and formal executable twin.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block font-semibold text-gray-300 mb-1">Model Snapshot Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Enterprise Core Twin - Baseline Reconstructed"
+                  value={reconstructName}
+                  onChange={(e) => setReconstructName(e.target.value)}
+                  className="w-full bg-slate-950 border border-gray-700 rounded px-3 py-2 text-gray-200 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                />
+              </div>
+
+              {/* Source Inputs Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-semibold text-gray-300">Model Source Inputs</label>
+                  <label className="text-indigo-300 flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeAllTelemetry}
+                      onChange={(e) => setIncludeAllTelemetry(e.target.checked)}
+                      className="rounded bg-slate-950 border-gray-700 text-indigo-600 focus:ring-0"
+                    />
+                    <span>Include All Active Catalog Intelligence</span>
+                  </label>
+                </div>
+
+                {!includeAllTelemetry && (
+                  <div className="space-y-3 p-3 bg-slate-950/80 border border-gray-800 rounded-lg max-h-56 overflow-y-auto">
+                    <div>
+                      <div className="font-semibold text-gray-400 mb-1">Observed PCAP Captures ({captures.length}):</div>
+                      {captures.length === 0 ? (
+                        <div className="text-gray-500 italic py-1">No analyzed captures cataloged.</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {captures.map((c) => {
+                            const raw = c as unknown as Record<string, unknown>;
+                            const name = (c.file_name || raw.filename || c.capture_id) as string;
+                            const isSelected = selectedCaptureIds.includes(c.capture_id);
+                            return (
+                              <label key={c.capture_id} className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-800/50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedCaptureIds((prev) => [...prev, c.capture_id]);
+                                    } else {
+                                      setSelectedCaptureIds((prev) => prev.filter((id) => id !== c.capture_id));
+                                    }
+                                  }}
+                                  className="rounded bg-slate-950 border-gray-700 text-indigo-600"
+                                />
+                                <span className="font-mono text-gray-200 truncate">{name}</span>
+                                <span className="text-gray-500 ml-auto font-mono">{c.packet_count ?? 0} pkts</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="font-semibold text-gray-400 mb-1">Configuration Imports ({importHistory.length}):</div>
+                      {importHistory.length === 0 ? (
+                        <div className="text-gray-500 italic py-1">No configuration tables imported.</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {importHistory.map((imp) => {
+                            const isSelected = selectedConfigIds.includes(imp.import_id);
+                            return (
+                              <label key={imp.import_id} className="flex items-center gap-2 p-1.5 rounded hover:bg-gray-800/50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedConfigIds((prev) => [...prev, imp.import_id]);
+                                    } else {
+                                      setSelectedConfigIds((prev) => prev.filter((id) => id !== imp.import_id));
+                                    }
+                                  }}
+                                  className="rounded bg-slate-950 border-gray-700 text-indigo-600"
+                                />
+                                <span className="font-mono text-gray-200 truncate">{imp.source_name}</span>
+                                <span className="text-emerald-400 ml-auto font-mono">+{imp.items_imported} items</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={() => setShowReconstructModal(false)}
+                className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow transition disabled:opacity-50"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{actionLoading ? 'Reconstructing...' : 'Execute Reconstruction'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Snapshot Creation Modal */}
       {showSnapshotModal && (

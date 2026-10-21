@@ -30,30 +30,41 @@ export interface BenchmarkFixtureMeta {
   name: string;
   category: BenchmarkCategory;
   provenance: BenchmarkProvenance;
-  provenance_details: string;
-  capture_path: string;
+  provenance_details?: string;
+  description?: string;
+  capture_path?: string;
   packet_count: number;
-  byte_count: number;
-  expected_outcome: ExpectedOutcome;
-  tags: string[];
+  byte_count?: number;
+  byte_size?: number;
+  expected_outcome?: ExpectedOutcome;
+  expected_properties?: ExpectedOutcome;
+  tags?: string[];
+  content_sha256?: string;
 }
 
 export interface DecodingStageMetrics {
-  packet_count: number;
-  byte_count: number;
-  flow_count: number;
-  event_count: number;
+  packet_count?: number;
+  packets_decoded?: number;
+  byte_count?: number;
+  bytes_processed?: number;
+  flow_count?: number;
+  event_count?: number;
   duration_ms: number;
-  throughput_pps: number;
-  throughput_mbps: number;
+  throughput_pps?: number;
+  throughput_pkts_per_sec?: number;
+  throughput_mbps?: number;
+  errors_encountered?: string[];
 }
 
 export interface DeterministicStageMetrics {
-  topology_node_count: number;
-  topology_edge_count: number;
+  topology_node_count?: number;
+  topology_edge_count?: number;
   forwarding_status: string;
   invariant_status: string;
-  violation_count: number;
+  violation_count?: number;
+  witness_path_length?: number;
+  forwarding_matches_expected?: boolean;
+  invariant_matches_expected?: boolean;
   duration_ms: number;
 }
 
@@ -68,12 +79,12 @@ export interface PredictiveStageMetrics {
   learned_algorithm: string;
   learned_mae: number | null;
   learned_rmse: number | null;
-  relative_improvement_pct: number;
+  relative_improvement_pct: number | null;
   comparison_status: BaselineComparisonStatus;
-  conformal_coverage_pct: number;
-  conformal_interval_mean_width: number;
-  ood_in_dist_score: number;
-  ood_shifted_score: number;
+  conformal_coverage_pct?: number | null;
+  conformal_interval_mean_width: number | null;
+  ood_in_dist_score: number | null;
+  ood_shifted_score: number | null;
   duration_ms: number;
 }
 
@@ -85,24 +96,31 @@ export interface ConsensusStageMetrics {
 
 export interface OperationalProfile {
   peak_memory_mb: number;
-  memory_growth_mb: number;
-  cpu_duration_ms: number;
-  wall_duration_ms: number;
+  memory_growth_mb?: number;
+  cpu_duration_ms?: number;
+  wall_duration_ms?: number;
+  total_runtime_ms?: number;
+  storage_bytes_delta?: number;
 }
 
 export interface BenchmarkRunRecord {
   run_id: string;
   fixture_id: string;
-  timestamp_iso: string;
+  fixture_name?: string;
+  timestamp_iso?: string;
+  executed_at?: string;
   provenance: BenchmarkProvenance;
   category: BenchmarkCategory;
+  status?: string;
   decoding: DecodingStageMetrics;
   deterministic: DeterministicStageMetrics;
   predictive: PredictiveStageMetrics | null;
   consensus: ConsensusStageMetrics;
-  profile: OperationalProfile;
-  verification_passed: boolean;
-  failure_reasons: string[];
+  profile?: OperationalProfile;
+  operational?: OperationalProfile;
+  verification_passed?: boolean;
+  failure_reasons?: string[];
+  limitations?: string[];
 }
 
 export interface BenchmarkSummaryResponse {

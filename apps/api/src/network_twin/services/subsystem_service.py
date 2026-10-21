@@ -10,7 +10,7 @@ from contracts.health import (
     SubsystemState,
 )
 
-from network_twin.config import AppSettings
+from network_twin.config import AppSettings, settings
 
 
 class SubsystemService:
@@ -88,21 +88,65 @@ class SubsystemService:
             ),
         }
 
-        # Check Database dependency if configured
-        if self.config.database_url:
-            # When configured, evaluate status (e.g. check connection)
-            # In Phase 00, if configured but no active pool, report degraded/down
+        # Real database connectivity and schema telemetry
+        if self.config.require_database and not self.config.database_url:
             reports["database"] = SubsystemReport(
-                status=SubsystemState.DEGRADED,
+                status=SubsystemState.DOWN,
                 operational_state=OperationalState.UNAVAILABLE,
-                details="Database configured but driver connection pool uninitialized in Phase 00 foundation.",
+                details="Database strictly required by configuration, but NTWIN_DATABASE_URL is not set.",
                 last_checked=now,
             )
-        else:
+            return reports
+
+        try:
+            from network_twin.storage.db_engine import DatabaseEngine, db_engine
+
+            active_engine = db_engine if self.config == settings else DatabaseEngine(self.config)
+            db_health = active_engine.check_health()
+            if db_health["connected"]:
+                if db_health["backend"] == "postgresql":
+                    pool_info = (
+                        f"min={db_health['pool_stats']['min_size']}, max={db_health['pool_stats']['max_size']}"
+                        if db_health.get("pool_stats")
+                        else "active"
+                    )
+                    details = (
+                        f"Persistent PostgreSQL database '{db_health['database_name']}' connected "
+                        f"(schema: v{db_health['schema_version']}, pool: {pool_info})."
+                    )
+                else:
+                    details = (
+                        f"Persistent SQLite catalog active "
+                        f"(file: {db_health['database_name']}, schema: v{db_health['schema_version']})."
+                    )
+                reports["database"] = SubsystemReport(
+                    status=SubsystemState.OK,
+                    operational_state=OperationalState.OPERATIONAL,
+                    details=details,
+                    last_checked=now,
+                )
+            else:
+                is_pg = self.config.database_url and (
+                    self.config.database_url.startswith("postgresql://")
+                    or self.config.database_url.startswith("postgres://")
+                )
+                details = (
+                    f"Configured PostgreSQL database unreachable: {db_health.get('error')}. "
+                    "Application refused silent fallback to SQLite."
+                    if is_pg
+                    else f"Database catalog unavailable: {db_health.get('error')}"
+                )
+                reports["database"] = SubsystemReport(
+                    status=SubsystemState.DOWN,
+                    operational_state=OperationalState.UNAVAILABLE,
+                    details=details,
+                    last_checked=now,
+                )
+        except Exception as e:
             reports["database"] = SubsystemReport(
-                status=SubsystemState.DISABLED,
+                status=SubsystemState.DOWN,
                 operational_state=OperationalState.UNAVAILABLE,
-                details="No persistent PostgreSQL database configured. Running in stateless foundation mode.",
+                details=f"Database engine error: {e}",
                 last_checked=now,
             )
 

@@ -28,6 +28,11 @@ vi.mock('../api/client', () => {
       listCaptures: vi.fn().mockResolvedValue([]),
       listImports: vi.fn().mockResolvedValue([]),
       listInvestigations: vi.fn().mockResolvedValue([]),
+      listCorpusCaptures: vi.fn().mockResolvedValue([]),
+      getCorpusSummary: vi.fn().mockResolvedValue(null),
+      listBenchmarkFixtures: vi.fn().mockResolvedValue([]),
+      listBenchmarkRuns: vi.fn().mockResolvedValue([]),
+      getBenchmarkSummary: vi.fn().mockResolvedValue(null),
     },
   };
 });
@@ -156,5 +161,42 @@ describe('Application Shell & Navigation', () => {
       expect(screen.getByText(/Evidence-Backed Network Incident Investigation & Reproducible Replay/i)).toBeInTheDocument();
       expect(screen.getByText(/Replay & Integrity Verified/i)).toBeInTheDocument();
     });
+
+    // Click on Protocol Research Lab tab -> renders operational Protocol Research Lab
+    const researchBtn = screen.getByRole('button', { name: /Protocol Research Lab/i });
+    fireEvent.click(researchBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('protocol-research-lab')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: /Protocol Research Lab/i })).toBeInTheDocument();
+    });
+  });
+
+  it('opens and closes slide-out navigation drawer with menu button, escape key, and backdrop', async () => {
+    vi.mocked(apiClient.getHealth).mockResolvedValue(mockHealth);
+    vi.mocked(apiClient.getReadiness).mockResolvedValue(mockHealth);
+
+    render(<App />);
+
+    const menuBtn = screen.getByRole('button', { name: /Open navigation menu/i });
+    expect(menuBtn).toBeInTheDocument();
+
+    const drawer = screen.getByTestId('nav-drawer');
+    expect(drawer).toHaveClass('-translate-x-full');
+
+    // Click menu toggle -> drawer opens
+    fireEvent.click(menuBtn);
+    expect(drawer).toHaveClass('translate-x-0');
+    expect(screen.getByTestId('nav-drawer-backdrop')).toBeInTheDocument();
+
+    // Press Escape -> drawer closes
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(drawer).toHaveClass('-translate-x-full');
+
+    // Open again and click backdrop -> drawer closes
+    fireEvent.click(menuBtn);
+    expect(drawer).toHaveClass('translate-x-0');
+    fireEvent.click(screen.getByTestId('nav-drawer-backdrop'));
+    expect(drawer).toHaveClass('-translate-x-full');
   });
 });

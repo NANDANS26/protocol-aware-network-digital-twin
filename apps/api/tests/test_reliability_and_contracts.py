@@ -42,7 +42,7 @@ class TestDatabaseMigrations:
     """Validates metadata store schema migration lifecycle."""
 
     def test_schema_migrations_reach_target_version(self, clean_env: AppSettings):
-        """Verifies that all migrations (v1-v8) apply cleanly to a fresh database."""
+        """Verifies that all migrations (v1-v9) apply cleanly to a fresh database."""
         store = MetadataStore(clean_env)
 
         # Verify target schema version
@@ -50,7 +50,7 @@ class TestDatabaseMigrations:
             cursor = conn.cursor()
             cursor.execute("SELECT MAX(version) FROM schema_migrations")
             latest_version = cursor.fetchone()[0]
-            assert latest_version == 8, f"Latest schema version must be 8, got {latest_version}"
+            assert latest_version == 9, f"Latest schema version must be 9, got {latest_version}"
 
             # Verify all expected tables exist
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -90,7 +90,7 @@ class TestDatabaseMigrations:
             cursor.execute("SELECT COUNT(*) FROM schema_migrations")
             migration_count_2 = cursor.fetchone()[0]
 
-        assert migration_count_1 == migration_count_2 == 8
+        assert migration_count_1 == migration_count_2 == 9
 
 
 class TestSecurityHardening:

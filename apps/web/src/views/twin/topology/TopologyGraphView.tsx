@@ -998,86 +998,119 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                             </text>
                           </g>
                         ) : (
-                          /* STANDARD ASSET CARD */
-                          <g>
-                            <rect
-                              x="0"
-                              y="0"
-                              width={pn.box.width}
-                              height={pn.box.height}
-                              rx="8"
-                              fill="#0f172a"
-                              stroke={
-                                isSelected
-                                  ? '#3b82f6'
-                                  : isConnected
-                                  ? '#10b981'
-                                  : isHovered
-                                  ? '#334155'
-                                  : '#1e293b'
-                              }
-                              strokeWidth={isSelected ? '2.5' : isConnected ? '1.8' : '1.2'}
-                              className="transition"
-                            />
-                            {/* Device Icon Tile */}
-                            <rect
-                              x="10"
-                              y="12"
-                              width="24"
-                              height="24"
-                              rx="5"
-                              fill="#1e293b"
-                              stroke="#334155"
-                              strokeWidth="1"
-                            />
-                            {/* Status dot in corner of icon tile */}
-                            <circle
-                              cx="31"
-                              cy="15"
-                              r="3.5"
-                              fill={
-                                pn.node.properties?.identity_status === 'CONFIRMED'
-                                  ? '#10b981'
-                                  : pn.node.properties?.identity_status === 'PROBABLE'
-                                  ? '#06b6d4'
-                                  : '#f59e0b'
-                              }
-                              stroke="#0f172a"
-                              strokeWidth="1.5"
-                            />
-                            {/* Server / Device glyph inside icon box */}
-                            <path
-                              d="M 15 19 L 29 19 M 15 24 L 29 24 M 15 29 L 29 29"
-                              stroke="#94a3b8"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                            />
+                          /* STANDARD ASSET CARD / MULTICAST GROUP / L2 ENDPOINT */
+                          (() => {
+                            const isMulticast = Boolean(pn.node.properties?.is_multicast || pn.node.properties?.entity_type === 'multicast_group');
+                            const isL2Only = Boolean(pn.node.properties?.is_l2_only || pn.node.properties?.entity_type === 'l2_device');
+                            const cardFill = isMulticast ? '#130c24' : isL2Only ? '#06171f' : '#0f172a';
+                            const cardStroke = isSelected
+                              ? (isMulticast ? '#c084fc' : isL2Only ? '#22d3ee' : '#3b82f6')
+                              : isConnected
+                              ? '#10b981'
+                              : isHovered
+                              ? (isMulticast ? '#9333ea' : isL2Only ? '#0891b2' : '#334155')
+                              : (isMulticast ? '#581c87' : isL2Only ? '#164e63' : '#1e293b');
+                            return (
+                              <g>
+                                <rect
+                                  x="0"
+                                  y="0"
+                                  width={pn.box.width}
+                                  height={pn.box.height}
+                                  rx="8"
+                                  fill={cardFill}
+                                  stroke={cardStroke}
+                                  strokeWidth={isSelected ? '2.5' : isConnected ? '1.8' : '1.2'}
+                                  className="transition"
+                                />
+                                {/* Device Icon Tile */}
+                                <rect
+                                  x="10"
+                                  y="12"
+                                  width="24"
+                                  height="24"
+                                  rx="5"
+                                  fill={isMulticast ? '#2e1065' : isL2Only ? '#083344' : '#1e293b'}
+                                  stroke={isMulticast ? '#6b21a8' : isL2Only ? '#0e7490' : '#334155'}
+                                  strokeWidth="1"
+                                />
+                                {/* Status dot in corner of icon tile */}
+                                <circle
+                                  cx="31"
+                                  cy="15"
+                                  r="3.5"
+                                  fill={
+                                    isMulticast
+                                      ? '#c084fc'
+                                      : isL2Only
+                                      ? '#22d3ee'
+                                      : pn.node.properties?.identity_status === 'CONFIRMED'
+                                      ? '#10b981'
+                                      : pn.node.properties?.identity_status === 'PROBABLE'
+                                      ? '#06b6d4'
+                                      : '#f59e0b'
+                                  }
+                                  stroke="#0f172a"
+                                  strokeWidth="1.5"
+                                />
+                                {/* Glyphs */}
+                                {isMulticast ? (
+                                  <path
+                                    d="M 17 24 A 5 5 0 0 1 27 24 M 19 24 A 3 3 0 0 1 25 24 M 22 24 L 22 25"
+                                    stroke="#d8b4fe"
+                                    strokeWidth="1.5"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                  />
+                                ) : isL2Only ? (
+                                  <path
+                                    d="M 16 20 L 26 20 M 16 24 L 28 24 M 18 28 L 26 28"
+                                    stroke="#67e8f9"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                  />
+                                ) : (
+                                  <path
+                                    d="M 15 19 L 29 19 M 15 24 L 29 24 M 15 29 L 29 29"
+                                    stroke="#94a3b8"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                  />
+                                )}
 
-                            {/* Primary Label */}
-                            <text
-                              x="42"
-                              y="23"
-                              fill="#f8fafc"
-                              fontSize="11.5"
-                              fontFamily="monospace"
-                              fontWeight="bold"
-                              className="select-none"
-                            >
-                              {primaryLabel.length > 17 ? primaryLabel.slice(0, 15) + '..' : primaryLabel}
-                            </text>
+                                {/* Primary Label */}
+                                <text
+                                  x="42"
+                                  y="23"
+                                  fill={isMulticast ? '#f3e8ff' : isL2Only ? '#ecfeff' : '#f8fafc'}
+                                  fontSize="11.5"
+                                  fontFamily="monospace"
+                                  fontWeight="bold"
+                                  className="select-none"
+                                >
+                                  {primaryLabel.length > 17 ? primaryLabel.slice(0, 15) + '..' : primaryLabel}
+                                </text>
 
-                            {/* Secondary Label */}
-                            <text
-                              x="42"
-                              y="37"
-                              fill="#94a3b8"
-                              fontSize="9.5"
-                              fontFamily="monospace"
-                              className="select-none"
-                            >
-                              {secondaryLabel.length > 20 ? secondaryLabel.slice(0, 18) + '..' : secondaryLabel}
-                            </text>
-                          </g>
+                                {/* Secondary Label */}
+                                <text
+                                  x="42"
+                                  y="37"
+                                  fill={isMulticast ? '#c084fc' : isL2Only ? '#22d3ee' : '#94a3b8'}
+                                  fontSize="9.5"
+                                  fontFamily="monospace"
+                                  className="select-none"
+                                >
+                                  {isMulticast
+                                    ? 'Multicast Group'
+                                    : isL2Only
+                                    ? 'Layer-2 Endpoint'
+                                    : secondaryLabel.length > 20
+                                    ? secondaryLabel.slice(0, 18) + '..'
+                                    : secondaryLabel}
+                                </text>
+                              </g>
+                            );
+                          })()
                         )}
                       </g>
                     );
@@ -1154,6 +1187,20 @@ export const TopologyGraphView: React.FC<TopologyGraphViewProps> = ({
                     <span className="font-mono text-amber-400">
                       {String(selectedNode.properties?.port || selectedNode.service_port)}
                     </span>
+                  </div>
+                )}
+
+                {selectedNode.properties?.entity_type === 'multicast_group' && (
+                  <div className="p-2 rounded bg-purple-950/60 border border-purple-800/60 text-purple-300 text-[11px] space-y-1">
+                    <div className="font-semibold text-purple-200">Multicast / Clock Group:</div>
+                    <div>Direct wire destination for PTP/multicast sequence distribution. Not an ordinary routable host; exempt from standard host subnetting.</div>
+                  </div>
+                )}
+
+                {selectedNode.properties?.entity_type === 'l2_device' && (
+                  <div className="p-2 rounded bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 text-[11px] space-y-1">
+                    <div className="font-semibold text-cyan-200">Layer-2 Direct Endpoint:</div>
+                    <div>Observed via direct Ethernet frame (e.g. EtherType 0x88F7). No synthetic IPv4 address invented.</div>
                   </div>
                 )}
 

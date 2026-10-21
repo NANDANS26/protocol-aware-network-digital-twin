@@ -208,7 +208,7 @@ export const SecurityTestingWorkbench: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="security-testing-workbench">
       {/* Top Header & Operational Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl bg-card border border-border shadow-sm">
         <div>

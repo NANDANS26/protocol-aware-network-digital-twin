@@ -212,4 +212,36 @@ describe('PredictiveWorkbench Component', () => {
       expect(screen.getByText(/Ground Truth Supremacy: Deterministic proofs always prevail./i)).toBeInTheDocument();
     });
   });
+
+  it('deduplicates datasets on extraction and prevents duplicate key warnings', async () => {
+    const existingDataset: DatasetManifest = {
+      ...mockDataset,
+      dataset_id: 'ds-synthetic-canonical-flow_volume_next_window',
+      name: 'Initial Canonical Dataset',
+    };
+    vi.mocked(apiClient.listPredictiveDatasets).mockResolvedValue([existingDataset]);
+
+    const newlyExtracted: DatasetManifest = {
+      ...mockDataset,
+      dataset_id: 'ds-synthetic-canonical-flow_volume_next_window',
+      name: 'Extracted Canonical Dataset',
+    };
+    vi.mocked(apiClient.extractPredictiveDataset).mockResolvedValue(newlyExtracted);
+
+    render(<PredictiveWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Initial Canonical Dataset')).toBeInTheDocument();
+    });
+
+    const extractBtn = screen.getByRole('button', { name: /Extract Dataset/i });
+    fireEvent.click(extractBtn);
+
+    await waitFor(() => {
+      expect(apiClient.extractPredictiveDataset).toHaveBeenCalled();
+      // Should now show the updated extracted dataset without duplicate entries
+      expect(screen.getByText('Extracted Canonical Dataset')).toBeInTheDocument();
+      expect(screen.queryByText('Initial Canonical Dataset')).not.toBeInTheDocument();
+    });
+  });
 });

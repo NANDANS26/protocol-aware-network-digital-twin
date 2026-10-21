@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAnalysisContext } from '../context/AnalysisContext';
 import {
   GitCompare,
   ShieldCheck,
@@ -23,6 +24,8 @@ import type {
 } from '../types/simulation';
 
 export const ScenarioLaboratoryView: React.FC = () => {
+  const { activeCapture, activeSnapshotId } = useAnalysisContext();
+
   const [activeSubTab, setActiveSubTab] = useState<'scenarios' | 'invariants' | 'reachability' | 'boundaries'>('scenarios');
   const [models, setModels] = useState<NetworkModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
@@ -34,6 +37,8 @@ export const ScenarioLaboratoryView: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [lastLiveRunId, setLastLiveRunId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -46,35 +51,87 @@ export const ScenarioLaboratoryView: React.FC = () => {
       ]);
 
       setModels(modelsData);
-      if (modelsData.length > 0 && !selectedModelId && modelsData[0]) {
-        setSelectedModelId(modelsData[0].model_id);
+      let chosenModelId = selectedModelId;
+      if (!chosenModelId) {
+        if (activeSnapshotId) {
+          const matchingSnapModel = modelsData.find((m) => m.source_snapshot_id === activeSnapshotId);
+          if (matchingSnapModel) chosenModelId = matchingSnapModel.model_id;
+        }
+        if (!chosenModelId) {
+          chosenModelId = modelsData.find((m) => !m.is_counterfactual)?.model_id || modelsData[0]?.model_id || '';
+        }
       }
+      setSelectedModelId(chosenModelId);
 
       setScenarios(scenariosData);
-      if (scenariosData.length > 0 && !selectedScenarioId && scenariosData[0]) {
-        setSelectedScenarioId(scenariosData[0].scenario_id);
-      }
+      const matching = scenariosData.find((s) => s.base_model_id === chosenModelId);
+      const chosenScenId = selectedScenarioId || matching?.scenario_id || scenariosData[0]?.scenario_id || '';
+      setSelectedScenarioId(chosenScenId);
 
       setInvariants(invariantsData);
+
+      // Attempt to load existing result for chosen scenario
+      if (chosenScenId) {
+        try {
+          const storedRes = await apiClient.getCounterfactualResult(chosenScenId);
+          setCounterfactualResult(storedRes || null);
+        } catch {
+          setCounterfactualResult(null);
+        }
+      }
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to load scenario laboratory data');
     } finally {
       setLoading(false);
     }
-  }, [selectedModelId, selectedScenarioId]);
+  }, [activeSnapshotId, selectedModelId, selectedScenarioId]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  const handleSelectModel = (modelId: string) => {
+    setSelectedModelId(modelId);
+    setRunError(null);
+    // Find scenario matching this model if current scenario doesn't match
+    const matching = scenarios.find((s) => s.base_model_id === modelId);
+    if (matching) {
+      setSelectedScenarioId(matching.scenario_id);
+      apiClient
+        .getCounterfactualResult(matching.scenario_id)
+        .then((res) => {
+          setCounterfactualResult(res || null);
+        })
+        .catch(() => setCounterfactualResult(null));
+    } else {
+      setCounterfactualResult(null);
+    }
+  };
+
+  const handleSelectScenario = (scenId: string) => {
+    setSelectedScenarioId(scenId);
+    setRunError(null);
+    apiClient
+      .getCounterfactualResult(scenId)
+      .then((res) => {
+        setCounterfactualResult(res || null);
+      })
+      .catch(() => setCounterfactualResult(null));
+  };
+
   const handleRunScenario = async (scenId: string): Promise<CounterfactualResult | null> => {
     setActionLoading(true);
+    setRunError(null);
     try {
       const res = await apiClient.runScenario(scenId);
       setCounterfactualResult(res);
+      if (res) {
+        setLastLiveRunId(res.run_id || res.result_id || null);
+      }
       return res;
     } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to run scenario');
+      const msg = (err as Error).message || 'Failed to run scenario';
+      setRunError(msg);
       return null;
     } finally {
       setActionLoading(false);
@@ -87,6 +144,7 @@ export const ScenarioLaboratoryView: React.FC = () => {
       const created = await apiClient.createScenario(scenario);
       setScenarios((prev) => [created, ...prev]);
       setSelectedScenarioId(created.scenario_id);
+      setCounterfactualResult(null);
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to create scenario');
     } finally {
@@ -166,6 +224,25 @@ export const ScenarioLaboratoryView: React.FC = () => {
         </div>
       </div>
 
+      {activeCapture && (
+        <div className="bg-indigo-950/40 border border-indigo-700/50 rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono">
+          <div className="flex items-center gap-2 text-gray-300">
+            <span className="text-gray-400">Active Capture Scope:</span>
+            <span className="text-cyan-300 font-semibold">{activeCapture.filename}</span>
+            {activeSnapshotId && (
+              <>
+                <span className="text-gray-500">|</span>
+                <span className="text-gray-400">Snapshot:</span>
+                <span className="text-indigo-300">{activeSnapshotId}</span>
+              </>
+            )}
+          </div>
+          <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+            Active Context Bound
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="p-4 rounded-lg bg-rose-950/40 border border-rose-800/50 flex items-start gap-3 text-rose-300 text-xs">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -229,14 +306,17 @@ export const ScenarioLaboratoryView: React.FC = () => {
         <CounterfactualScenarioView
           models={models}
           selectedModelId={selectedModelId}
-          onSelectModel={setSelectedModelId}
+          onSelectModel={handleSelectModel}
           scenarios={scenarios}
           selectedScenarioId={selectedScenarioId}
-          onSelectScenario={setSelectedScenarioId}
+          onSelectScenario={handleSelectScenario}
           onRunScenario={handleRunScenario}
           onCreateScenario={handleCreateScenario}
           counterfactualResult={counterfactualResult}
           loading={actionLoading || loading}
+          runError={runError}
+          lastLiveRunId={lastLiveRunId}
+          onClearError={() => setRunError(null)}
         />
       )}
 

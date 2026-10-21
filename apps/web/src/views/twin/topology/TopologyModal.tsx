@@ -19,6 +19,8 @@ export interface TopologyModalProps {
   evidenceClassFilter: string;
   onChangeEvidenceFilter: (filter: string) => void;
   renderEvidenceClassBadge?: (evClass?: EvidenceClass | string) => React.ReactNode;
+  sourceScopeLabel?: string;
+  sourceScopeDetails?: string;
 }
 
 export const TopologyModal: React.FC<TopologyModalProps> = ({
@@ -32,6 +34,8 @@ export const TopologyModal: React.FC<TopologyModalProps> = ({
   evidenceClassFilter,
   onChangeEvidenceFilter,
   renderEvidenceClassBadge,
+  sourceScopeLabel,
+  sourceScopeDetails,
 }) => {
   const previousActiveElement = useRef<HTMLElement | null>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
@@ -118,13 +122,24 @@ export const TopologyModal: React.FC<TopologyModalProps> = ({
                 <h2 id="topology-modal-title" className="text-base sm:text-lg font-bold text-white tracking-tight">
                   Interactive Network Topology
                 </h2>
-                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Full-Screen Workspace
-                </span>
+                {sourceScopeLabel ? (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                    {sourceScopeLabel}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Full-Screen Workspace
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Hierarchical clustered twin with boundary edge routing &bull;{' '}
+                {sourceScopeDetails ? (
+                  <span>{sourceScopeDetails} &bull; </span>
+                ) : (
+                  <span>Hierarchical clustered twin with boundary edge routing &bull; </span>
+                )}
                 <span className="font-mono text-slate-300 font-semibold">{nodeCount}</span> nodes &bull;{' '}
                 <span className="font-mono text-cyan-400 font-semibold">{subnetCount}</span> subnets &bull;{' '}
                 <span className="font-mono text-purple-400 font-semibold">{routerCount}</span> transit routers &bull;{' '}

@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 import type { AnalysisJob, FlowSummary } from '../types/analysis';
 import type { NetworkEvent } from '@contracts/network_event';
+import { Network, ArrowRight, RefreshCw } from 'lucide-react';
+import { useAnalysisContext } from '../context/AnalysisContext';
 
-export const ObservatoryView: React.FC = () => {
+export interface ObservatoryViewProps {
+  onNavigateToTwin?: (params: { captureId?: string; snapshotId?: string; filename?: string; jobId?: string }) => void;
+}
+
+export const ObservatoryView: React.FC<ObservatoryViewProps> = ({ onNavigateToTwin }) => {
+  const { activeJobId, notifyCaptureUploaded } = useAnalysisContext();
   const [currentJob, setCurrentJob] = useState<AnalysisJob | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -13,6 +20,30 @@ export const ObservatoryView: React.FC = () => {
   const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
   const [protocolFilter, setProtocolFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (activeJobId && (!currentJob || currentJob.job_id !== activeJobId)) {
+      setLoading(true);
+      apiClient
+        .getJob(activeJobId)
+        .then((job) => {
+          if (!isCancelled) {
+            setCurrentJob(job);
+            setEvents([]);
+          }
+        })
+        .catch((err) => {
+          if (!isCancelled) setError(err.message || 'Failed to load active capture job');
+        })
+        .finally(() => {
+          if (!isCancelled) setLoading(false);
+        });
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeJobId]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -24,6 +55,7 @@ export const ObservatoryView: React.FC = () => {
 
     try {
       const resp = await apiClient.uploadCapture(file);
+      await notifyCaptureUploaded(resp.capture_id || resp.job_id, resp.job_id, resp.filename);
       const job = await apiClient.getJob(resp.job_id);
       setCurrentJob(job);
       if (activeTab === 'events') {
@@ -43,6 +75,7 @@ export const ObservatoryView: React.FC = () => {
 
     try {
       const resp = await apiClient.runDemoAnalysis(format);
+      await notifyCaptureUploaded(resp.capture_id || resp.job_id, resp.job_id, resp.filename);
       const job = await apiClient.getJob(resp.job_id);
       setCurrentJob(job);
       if (activeTab === 'events') {
@@ -90,6 +123,26 @@ export const ObservatoryView: React.FC = () => {
     }
     return true;
   });
+
+  const [syncingTwin, setSyncingTwin] = useState<boolean>(false);
+  const [twinSyncMsg, setTwinSyncMsg] = useState<string | null>(null);
+  const [createdSnapshotId, setCreatedSnapshotId] = useState<string | null>(null);
+
+  const handleCreateOrSyncTwinSnapshot = async () => {
+    if (!currentJob) return;
+    setSyncingTwin(true);
+    setTwinSyncMsg(null);
+    try {
+      const targetId = currentJob.capture_id || currentJob.job_id;
+      const snap = await apiClient.createSnapshotFromCapture(targetId);
+      setCreatedSnapshotId(snap.snapshot_id);
+      setTwinSyncMsg(`Twin snapshot successfully created (${snap.snapshot_id.slice(0, 12)}... with ${snap.node_count} nodes, ${snap.edge_count} edges).`);
+    } catch (err: any) {
+      setTwinSyncMsg(`Failed to create snapshot: ${err.message || 'Unknown error'}`);
+    } finally {
+      setSyncingTwin(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -146,6 +199,65 @@ export const ObservatoryView: React.FC = () => {
         )}
       </div>
 
+      {/* Network Digital Twin Lineage & Snapshot Action Card */}
+      {currentJob && currentJob.status === 'completed' && (
+        <div className="bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900 border border-indigo-800/60 rounded-lg p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-indigo-900/60 rounded-lg border border-indigo-700/50 text-indigo-400 shrink-0 mt-0.5">
+              <Network className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-900/80 text-indigo-300 border border-indigo-700/60">
+                  Digital Twin Lineage Available
+                </span>
+                <span className="text-xs text-slate-400 font-mono">Capture: {currentJob.filename}</span>
+              </div>
+              <h2 className="text-sm font-bold text-slate-100 mt-1">
+                Open Verified Capture in Network Digital Twin
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Observed flows, endpoint identities, subnets, and Layer-2 direct Ethernet frames are mapped directly to an immutable Digital Twin snapshot with full audit provenance.
+              </p>
+              {twinSyncMsg && (
+                <div className="text-xs text-emerald-400 mt-1.5 font-medium">{twinSyncMsg}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleCreateOrSyncTwinSnapshot}
+              disabled={syncingTwin}
+              className="px-3 py-1.5 border border-indigo-700/80 rounded-md text-xs font-medium text-indigo-300 bg-indigo-950/80 hover:bg-indigo-900/80 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncingTwin ? 'animate-spin' : ''}`} />
+              <span>{syncingTwin ? 'Syncing...' : 'Sync Snapshot'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const targetParams = {
+                  captureId: currentJob.capture_id || currentJob.job_id,
+                  snapshotId: createdSnapshotId || undefined,
+                  jobId: currentJob.job_id,
+                  filename: currentJob.filename,
+                };
+                if (onNavigateToTwin) {
+                  onNavigateToTwin(targetParams);
+                } else {
+                  window.dispatchEvent(new CustomEvent('navigate-twin', { detail: targetParams }));
+                }
+              }}
+              className="px-4 py-1.5 rounded-md text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-sm transition-colors flex items-center gap-1.5"
+            >
+              <span>View in Digital Twin</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Metrics Dashboard */}
       {summary ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -180,10 +292,17 @@ export const ObservatoryView: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
             <div className="text-xs text-slate-400">App Transactions</div>
             <div className="text-2xl font-bold text-slate-100 mt-1">
-              {summary.http_requests + summary.dns_queries + summary.tls_handshakes}
+              {(summary.http_requests || 0) + (summary.dns_queries || 0) + (summary.tls_handshakes || 0) + (summary.ptp_messages || 0)}
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              {summary.dns_queries} DNS | {summary.http_requests} HTTP | {summary.tls_handshakes} TLS
+              {[
+                summary.dns_queries ? `${summary.dns_queries} DNS` : null,
+                summary.http_requests ? `${summary.http_requests} HTTP` : null,
+                summary.tls_handshakes ? `${summary.tls_handshakes} TLS` : null,
+                summary.ptp_messages ? `${summary.ptp_messages} PTP` : null,
+              ]
+                .filter(Boolean)
+                .join(' | ') || `${summary.dns_queries} DNS | ${summary.http_requests} HTTP | ${summary.tls_handshakes} TLS`}
             </div>
           </div>
 
@@ -191,9 +310,10 @@ export const ObservatoryView: React.FC = () => {
             <div className="text-xs text-slate-400">Parser Integrity</div>
             <div className="text-2xl font-bold text-emerald-400 mt-1">
               {summary.parser_status_counts['ok'] || 0}
+              <span className="text-sm font-normal text-slate-400"> / {summary.total_packets}</span>
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              {(summary.parser_status_counts['malformed'] || 0) + (summary.parser_status_counts['checksum_error'] || 0)} errors
+              {((summary.parser_status_counts['ok'] || 0) / (summary.total_packets || 1) * 100).toFixed(1)}% decoded ok · {(summary.parser_status_counts['malformed'] || 0) + (summary.parser_status_counts['checksum_error'] || 0)} errors
             </div>
           </div>
         </div>

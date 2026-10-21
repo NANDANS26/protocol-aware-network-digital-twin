@@ -186,22 +186,34 @@ export interface SequenceRegressionFixture {
 export interface SequenceDifferentialResult {
   sequence_id: string;
   mode: string;
-  baseline_name: string;
-  candidate_name: string;
+  test_name?: string;
+  baseline_name?: string;
+  candidate_name?: string;
   equivalent: boolean;
   differences: string[];
-  baseline_event_count: number;
-  candidate_event_count: number;
+  baseline_event_count?: number;
+  baseline_events_count?: number;
+  candidate_event_count?: number;
+  candidate_events_count?: number;
   duration_ms: number;
+  diagnostic?: string | null;
+}
+
+export interface CoverageGapItem {
+  feature: string;
+  description: string;
+  behavior?: string;
+  limitation_status: string;
+  subsystem?: string;
+  status?: string;
+  details?: string;
 }
 
 export interface CoverageGapsResponse {
-  engine_version: string;
-  supported_capabilities: string[];
-  documented_coverage_gaps: {
-    feature: string;
-    description: string;
-    behavior: string;
-    limitation_status: string;
-  }[];
+  status?: string;
+  engine_version?: string;
+  supported_capabilities?: string[];
+  supported_stateful_semantics?: string[];
+  documented_coverage_gaps?: CoverageGapItem[];
+  coverage_gaps_and_limitations?: CoverageGapItem[];
 }

@@ -5,6 +5,7 @@ FastAPI REST API Routes for Phase 06: Predictive Network World Model & Validated
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -102,6 +103,10 @@ def extract_dataset(req: DatasetExtractRequest) -> DatasetManifest:
             )
             manifest.name = req.name
             manifest.description = f"{req.description} (canonical benchmark fallback: no captures in store)"
+
+    # Prevent duplicate dataset_id collisions if dataset already exists in store
+    if metadata_store.get_dataset_manifest(manifest.dataset_id):
+        manifest.dataset_id = f"{manifest.dataset_id}-{uuid.uuid4().hex[:8]}"
 
     metadata_store.save_dataset_manifest(manifest)
     return manifest

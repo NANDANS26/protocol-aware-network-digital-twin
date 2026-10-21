@@ -52,6 +52,7 @@ add_library(protocol_engine_core STATIC
     src/flow/flow_table.cpp
     src/reassembly/tcp_stream_reassembler.cpp
     src/protocols/dns_parser.cpp
+    src/protocols/ptp_parser.cpp
     src/protocols/http_parser.cpp
     src/protocols/tls_parser.cpp
     src/protocols/quic_classifier.cpp

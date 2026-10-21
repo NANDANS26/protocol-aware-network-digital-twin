@@ -101,9 +101,12 @@ async def build_network_model(
 
 
 @router.get("/models", response_model=list[NetworkModel])
-async def list_models(store: MetadataStore = Depends(get_metadata_store)):
-    """Lists all constructed NetworkModels."""
-    return store.list_network_models()
+async def list_models(
+    is_counterfactual: bool | None = None,
+    store: MetadataStore = Depends(get_metadata_store),
+):
+    """Lists all constructed NetworkModels, optionally filtered by counterfactual state."""
+    return store.list_network_models(is_counterfactual=is_counterfactual)
 
 
 @router.get("/models/{model_id}", response_model=NetworkModel)

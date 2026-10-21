@@ -20,7 +20,6 @@ import type {
   SecurityInvariant,
   VerificationResult,
   SimulationScenario,
-  CounterfactualResult,
 } from '../types/simulation';
 
 vi.mock('../api/client', () => {
@@ -38,6 +37,7 @@ vi.mock('../api/client', () => {
       createSnapshot: vi.fn(),
       compareSnapshots: vi.fn(),
       importConfiguration: vi.fn(),
+      deleteConfigImport: vi.fn(),
       listModels: vi.fn(),
       getModel: vi.fn(),
       buildNetworkModel: vi.fn(),
@@ -322,35 +322,6 @@ describe('NetworkTwinView Workstation', () => {
     created_at_iso: '2026-10-17T10:00:00Z',
   };
 
-  const mockCounterfactualResult: CounterfactualResult = {
-    result_id: 'cf-res-01',
-    scenario_id: 'scen-01',
-    scenario_name: 'Emergency Port Block',
-    base_model_id: 'model-001',
-    baseline_fingerprint: '3b92f7c0a8761234',
-    counterfactual_model_id: 'model-001-sim',
-    counterfactual_fingerprint: '9f8e7d6c5b4a3210',
-    applied_actions_count: 1,
-    path_differences: [
-      {
-        source_ip: '10.0.1.50',
-        destination_ip: '192.168.1.100',
-        protocol: 'TCP',
-        destination_port: 22,
-        baseline_status: 'REACHABLE',
-        counterfactual_status: 'BLOCKED',
-        change_type: 'NEWLY_BLOCKED',
-        explanation: 'Path blocked by counterfactual firewall rule',
-      },
-    ],
-    invariant_differences: [],
-    newly_reachable_paths_count: 0,
-    newly_blocked_paths_count: 1,
-    security_regressions_count: 0,
-    summary_explanation: 'Simulation resulted in 1 path change and 0 invariant deviations.',
-    created_at_iso: '2026-10-17T10:10:00Z',
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(apiClient.listAssets).mockResolvedValue(mockAssets);
@@ -401,7 +372,7 @@ describe('NetworkTwinView Workstation', () => {
     render(<NetworkTwinView />);
 
     await waitFor(() => {
-      expect(screen.getByText('Evidence Inspector')).toBeInTheDocument();
+      expect(screen.getByText('app-server.corp.local')).toBeInTheDocument();
     });
 
     const evTabBtn = screen.getByRole('button', { name: /Evidence Inspector/i });
@@ -409,7 +380,7 @@ describe('NetworkTwinView Workstation', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/PCAP_OBSERVATION/i)).toBeInTheDocument();
-      expect(screen.getByText(/capture-001\.pcap/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/capture-001\.pcap/i).length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -542,29 +513,69 @@ describe('NetworkTwinView Workstation', () => {
     });
   });
 
-  it('allows switching to What-If Scenarios and running counterfactual simulation', async () => {
-    vi.mocked(apiClient.runScenario).mockResolvedValue(mockCounterfactualResult);
+  it('executes model reconstruction with selected evidence inputs and renders consumption audit', async () => {
+    const reconstructedSnap: TopologySnapshot = {
+      snapshot_id: 'snap-reconstructed-999',
+      name: 'Enterprise Core Twin - Baseline Reconstructed',
+      node_count: 4,
+      edge_count: 3,
+      source_captures: ['cap-001'],
+      source_configs: ['imp-001'],
+      created_at_iso: '2026-10-21T08:00:00Z',
+      metadata: {
+        consumption_audit: {
+          consumed_assets_count: 2,
+          consumed_subnets_count: 1,
+          consumed_services_count: 1,
+          consumed_edges_count: 3,
+          consumed_subnets: ['192.168.1.0/24'],
+          source_captures: ['cap-001'],
+          source_configs: ['imp-001'],
+          skipped_or_rejected: [
+            {
+              item_id: 'seg-mcast-01',
+              item_type: 'SUBNET',
+              action: 'SKIPPED',
+              reason: 'Multicast/loopback prefix 224.0.1.129 excluded from unicast forwarding tree',
+            },
+          ],
+        },
+        evidence_coverage: {
+          directly_observed_pct: 75.0,
+          inferred_pct: 25.0,
+          configured_pct: 0.0,
+          total_elements: 7,
+        },
+        limitations: [
+          'PCAP traffic analysis is temporally bounded to the packet capture observation window.',
+        ],
+      },
+    };
+
+    vi.mocked(apiClient.createSnapshot).mockResolvedValue(reconstructedSnap);
 
     render(<NetworkTwinView />);
 
     await waitFor(() => {
-      expect(screen.getByText('What-If Scenarios')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Reconstruct Model$/i })).toBeInTheDocument();
     });
 
-    const scenTabBtn = screen.getByRole('button', { name: /What-If Scenarios/i });
-    fireEvent.click(scenTabBtn);
+    fireEvent.click(screen.getByRole('button', { name: /^Reconstruct Model$/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Counterfactual Simulation & What-If Matrix/i)).toBeInTheDocument();
-      expect(screen.getAllByText('Emergency Port Block').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/Build & Reconstruct Network Digital Twin/i)).toBeInTheDocument();
+      expect(screen.getByText(/Model Source Inputs/i)).toBeInTheDocument();
     });
 
-    const runSimBtn = screen.getByRole('button', { name: /Run Simulation/i });
-    fireEvent.click(runSimBtn);
+    const executeBtn = screen.getByRole('button', { name: /Execute Reconstruction/i });
+    fireEvent.click(executeBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Path Reachability Status Shifts/i)).toBeInTheDocument();
-      expect(screen.getByText(/9f8e7d6c5b4a3210/)).toBeInTheDocument();
+      expect(apiClient.createSnapshot).toHaveBeenCalled();
+      expect(screen.getByText(/Model Reconstructed & Persisted/i)).toBeInTheDocument();
+      expect(screen.getByText(/75% Directly Observed/i)).toBeInTheDocument();
+      expect(screen.getByText(/Source Records Filtered \/ Skipped/i)).toBeInTheDocument();
+      expect(screen.getByText(/Multicast\/loopback prefix 224.0.1.129 excluded/i)).toBeInTheDocument();
     });
   });
 
@@ -582,6 +593,308 @@ describe('NetworkTwinView Workstation', () => {
       expect(screen.getByText(/Executable Formal Model Inspector/i)).toBeInTheDocument();
       expect(screen.getByText(/3b92f7c0a8761234/)).toBeInTheDocument();
       expect(screen.getByText('model-001')).toBeInTheDocument();
+    });
+  });
+
+  it('handles structured object diffs with node and edge change objects without crashing React', async () => {
+    const complexDiff: SnapshotComparisonDiff = {
+      base_snapshot_id: 'snap-alpha',
+      target_snapshot_id: 'snap-beta',
+      compared_at_iso: '2026-10-18T12:00:00Z',
+      added_nodes: [
+        {
+          id: 'node-printer-01',
+          node_id: 'node-printer-01',
+          label: 'office-printer.local',
+          node_type: 'ASSET',
+        },
+      ],
+      removed_nodes: [],
+      modified_nodes: [
+        {
+          node_id: 'node-db-01',
+          changes: {
+            label: { from: 'db-dev', to: 'db-prod' },
+          },
+        },
+      ],
+      added_edges: [
+        {
+          id: 'edge-01',
+          edge_id: 'edge-01',
+          source_node_id: 'node-app-01',
+          target_node_id: 'node-db-01',
+          edge_type: 'OBSERVED_COMMUNICATION',
+          primary_protocol: 'TCP',
+          packet_count: 50,
+          byte_count: 5000,
+          evidence_class: 'DIRECT_OBSERVATION',
+        },
+      ],
+      removed_edges: [],
+      modified_edges: [
+        {
+          edge_id: 'edge-02',
+          changes: {
+            packet_count: { from: 10, to: 90 },
+          },
+        },
+      ],
+      evidence_explanations: [
+        {
+          type: 'added_relationship',
+          edge_id: 'edge-01',
+          evidence_class: 'DIRECT_OBSERVATION',
+          explanation: 'Newly observed communication (TCP) between node-app-01 and node-db-01 (50 packets)',
+          evidence_ids: ['ev-capture-100', 'ev-capture-101'],
+        },
+        {
+          type: 'added_entity',
+          node_id: 'node-printer-01',
+          explanation: 'Newly discovered ASSET: office-printer.local',
+        },
+        {
+          type: 'unknown_anomaly_marker',
+          custom_code: 'ERR_ROUTING_MISCONFIG',
+          explanation: 'Asymmetric routing condition identified between subnets',
+        },
+      ],
+    };
+
+    vi.mocked(apiClient.compareSnapshots).mockResolvedValue(complexDiff);
+
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Snapshot Comparison/i })).toBeInTheDocument();
+    });
+
+    const compTabBtn = screen.getByRole('button', { name: /Snapshot Comparison/i });
+    fireEvent.click(compTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Differential Topology Comparison/i)).toBeInTheDocument();
+    });
+
+    const runDiffBtn = screen.getByRole('button', { name: /Run Diff/i });
+    fireEvent.click(runDiffBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Evidence-Grounded Explanations/i)).toBeInTheDocument();
+      expect(screen.getByText(/Newly observed communication \(TCP\) between node-app-01/i)).toBeInTheDocument();
+      expect(screen.getByText(/Newly discovered ASSET: office-printer\.local/i)).toBeInTheDocument();
+      expect(screen.getByText(/Asymmetric routing condition identified/i)).toBeInTheDocument();
+    });
+
+    // Expand evidence drawer
+    const evidenceDrawerBtn = screen.getByRole('button', { name: /Evidence Records \(2\)/i });
+    fireEvent.click(evidenceDrawerBtn);
+
+    expect(screen.getByText('ev-capture-100')).toBeInTheDocument();
+    expect(screen.getByText('ev-capture-101')).toBeInTheDocument();
+
+    // Verify modified nodes & edges rendered
+    expect(screen.getAllByText('node-db-01').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('db-dev')).toBeInTheDocument();
+    expect(screen.getByText('db-prod')).toBeInTheDocument();
+  });
+
+  it('displays identical topologies empty state when diff has zero differences', async () => {
+    const emptyDiff: SnapshotComparisonDiff = {
+      base_snapshot_id: 'snap-same-1',
+      target_snapshot_id: 'snap-same-2',
+      added_nodes: [],
+      removed_nodes: [],
+      modified_nodes: [],
+      added_edges: [],
+      removed_edges: [],
+      modified_edges: [],
+      evidence_explanations: [],
+    };
+
+    vi.mocked(apiClient.compareSnapshots).mockResolvedValue(emptyDiff);
+
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Snapshot Comparison/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Snapshot Comparison/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Differential Topology Comparison/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Diff/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Identical Topologies Detected/i)).toBeInTheDocument();
+    });
+  });
+
+  it('renders the 3 twin lifecycle navigation groups and confirms duplicated workbenches are removed', async () => {
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByText('INGEST & RECONSTRUCT')).toBeInTheDocument();
+      expect(screen.getByText('TOPOLOGY & ASSETS')).toBeInTheDocument();
+      expect(screen.getByText('VERIFY & VALIDATE')).toBeInTheDocument();
+    });
+
+    // Confirm duplicate workbenches are removed from Twin
+    expect(screen.queryByText('Real Captures & Differential')).not.toBeInTheDocument();
+    expect(screen.queryByText('Incident Investigations')).not.toBeInTheDocument();
+    expect(screen.queryByText('What-If Scenarios')).not.toBeInTheDocument();
+
+    // Switch to INGEST & RECONSTRUCT -> Import & Ingestion
+    const importsBtn = screen.getByRole('button', { name: /Import & Ingestion/i });
+    fireEvent.click(importsBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Import Network Configuration/i)).toBeInTheDocument();
+    });
+  });
+
+  it('toggles mobile workspace drawer and displays active tool name', async () => {
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-active-workspace')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('mobile-active-workspace')).toHaveTextContent('Active: Asset Explorer');
+
+    // Toggle button opens the drawer
+    const toggleBtn = screen.getByRole('button', { name: /Toggle workspace navigation menu/i });
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+    // Clicking it again closes the drawer
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('renders Import & Ingestion tab safely with missing sha256_hash and undefined imported_at_iso without slice crash', async () => {
+    const rawCaptures = [
+      {
+        capture_id: 'cap-legacy-raw-01',
+        filename: 'legacy_capture.pcap', // note filename and content_sha256 instead of file_name/sha256_hash
+        content_sha256: '9876543210abcdef9876543210abcdef',
+        file_size_bytes: 2048,
+        format: 'pcap',
+        // sha256_hash is undefined
+      },
+    ];
+
+    const rawImports = [
+      {
+        import_id: 'imp-legacy-01',
+        source_name: 'legacy_routes.cfg',
+        source_type: 'ROUTING_TABLE',
+        items_imported: 3,
+        status: 'completed',
+        errors: [],
+        // imported_at_iso is undefined
+      },
+    ];
+
+    vi.mocked(apiClient.listCaptures).mockResolvedValue(rawCaptures as unknown as CaptureMetadata[]);
+    vi.mocked(apiClient.listImports).mockResolvedValue(rawImports as unknown as ConfigImportResult[]);
+
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Network Digital Twin/i })).toBeInTheDocument();
+    });
+
+    const importsBtn = screen.getByRole('button', { name: /Import & Ingestion/i });
+    fireEvent.click(importsBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('legacy_capture.pcap')).toBeInTheDocument();
+      expect(screen.getByText(/SHA: 9876543210ab.../i)).toBeInTheDocument();
+      expect(screen.getByText('legacy_routes.cfg')).toBeInTheDocument();
+      expect(screen.getByText(/\+3 items/i)).toBeInTheDocument();
+    });
+  });
+
+  it('submits configuration import with semantic type and auto-detected or selected format', async () => {
+    vi.mocked(apiClient.importConfiguration).mockResolvedValue({
+      import_id: 'imp-new-123',
+      source_name: 'core-router-routes',
+      source_type: 'ROUTING_TABLE',
+      format: 'routing_table',
+      items_imported: 4,
+      status: 'completed',
+      errors: [],
+      created_at_iso: '2026-10-20T12:00:00Z',
+    } as unknown as ConfigImportResult);
+
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Network Digital Twin/i })).toBeInTheDocument();
+    });
+
+    const importsBtn = screen.getByRole('button', { name: /Import & Ingestion/i });
+    fireEvent.click(importsBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Submit & Ingest Configuration/i })).toBeInTheDocument();
+    });
+
+    const submitBtn = screen.getByRole('button', { name: /Submit & Ingest Configuration/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(apiClient.importConfiguration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source_name: 'core-router-routes',
+          format: 'routing_table',
+        })
+      );
+      expect(screen.getByText(/Imported 4 items successfully from 'core-router-routes'/i)).toBeInTheDocument();
+    });
+  });
+
+  it('deletes imported configuration with confirmation and displays success feedback without accidental POST', async () => {
+    const rawImports = [
+      {
+        import_id: 'imp-del-01',
+        source_name: 'unwanted_routes.cfg',
+        source_type: 'ROUTING_TABLE',
+        items_imported: 2,
+        status: 'completed',
+        errors: [],
+        imported_at_iso: '2026-10-20T12:00:00Z',
+      },
+    ];
+
+    vi.mocked(apiClient.listImports).mockResolvedValue(rawImports as unknown as ConfigImportResult[]);
+    vi.mocked(apiClient.deleteConfigImport).mockResolvedValue({ status: 'DELETED', import_id: 'imp-del-01' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<NetworkTwinView />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /Network Digital Twin/i })).toBeInTheDocument();
+    });
+
+    const importsBtn = screen.getByRole('button', { name: /Import & Ingestion/i });
+    fireEvent.click(importsBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('unwanted_routes.cfg')).toBeInTheDocument();
+    });
+
+    const deleteBtn = screen.getByRole('button', { name: /Delete import unwanted_routes\.cfg/i });
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalled();
+      expect(apiClient.deleteConfigImport).toHaveBeenCalledWith('imp-del-01');
+      expect(screen.getByText(/Configuration import 'unwanted_routes\.cfg' deleted successfully\./i)).toBeInTheDocument();
     });
   });
 });

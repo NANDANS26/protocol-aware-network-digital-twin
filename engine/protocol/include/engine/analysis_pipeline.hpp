@@ -12,6 +12,7 @@
 #include "engine/decoders/tcp_decoder.hpp"
 #include "engine/decoders/udp_decoder.hpp"
 #include "engine/protocols/dns_parser.hpp"
+#include "engine/protocols/ptp_parser.hpp"
 #include "engine/protocols/http_parser.hpp"
 #include "engine/protocols/tls_parser.hpp"
 #include "engine/protocols/quic_classifier.hpp"
@@ -78,6 +79,7 @@ struct AnalysisReport {
     uint64_t http_responses{0};
     uint64_t tls_handshakes{0};
     uint64_t quic_datagrams{0};
+    uint64_t ptp_messages{0};
 
     std::vector<std::string> anomalies;
     std::vector<FlowRecordSummary> flows;

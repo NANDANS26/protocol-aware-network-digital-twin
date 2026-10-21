@@ -379,6 +379,8 @@ class PathDifference(BaseModel):
     counterfactual_status: ReachabilityStatus
     change_type: Literal["NEWLY_REACHABLE", "NEWLY_BLOCKED", "PATH_CHANGED", "UNCHANGED"]
     explanation: str
+    baseline_reason: str | None = None
+    counterfactual_reason: str | None = None
 
 
 class InvariantDifference(BaseModel):

@@ -34,10 +34,56 @@ jobs:
       - name: Run C++ Unit Tests
         run: ctest --test-dir build/engine -C Release --output-on-failure
 
-  backend-python:
-    name: Backend API & Contract Validation
-    runs-on: ubuntu-latest
+  pipeline-rust:
+    name: Rust Evidence Pipeline (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/evidence_pipeline
+
+      - name: Rust Format Check
+        run: cargo fmt --manifest-path packages/evidence_pipeline/Cargo.toml --check
+
+      - name: Run Cargo Clippy
+        run: cargo clippy --manifest-path packages/evidence_pipeline/Cargo.toml -- -D warnings
+
+      - name: Run Cargo Tests
+        run: cargo test --manifest-path packages/evidence_pipeline/Cargo.toml --verbose
+
+      - name: Build Release Binary
+        run: cargo build --manifest-path packages/evidence_pipeline/Cargo.toml --release
+
+  backend-python:
+    name: Backend API & PostgreSQL Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: network_twin
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +92,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+
+      - name: Set up Rust toolchain for Pipeline Integration
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install Python Dependencies
         run: |
@@ -59,14 +108,24 @@ jobs:
           cmake -B build/engine -S engine/protocol -DCMAKE_BUILD_TYPE=Release
           cmake --build build/engine --config Release
 
+      - name: Build Rust Evidence Pipeline
+        run: cargo build --manifest-path packages/evidence_pipeline/Cargo.toml --release
+
       - name: Run Ruff Linter
         run: ruff check apps/api packages/contracts/python
 
       - name: Run Ruff Format Check
         run: ruff format --check apps/api packages/contracts/python
 
-      - name: Run Pytest Suite
+      - name: Run Pytest Suite with PostgreSQL Integration
+        env:
+          NTWIN_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/network_twin
         run: pytest apps/api/tests tests/integration -v
+
+      - name: Run SQLite to PostgreSQL Migration Tool Verification
+        env:
+          NTWIN_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/network_twin
+        run: python -m network_twin.storage.migration_tool --sqlite-path data/metadata.db --pg-url postgresql://postgres:postgrespassword@localhost:5432/network_twin
 
   frontend-web:
     name: React Workstation Typecheck & Vitest

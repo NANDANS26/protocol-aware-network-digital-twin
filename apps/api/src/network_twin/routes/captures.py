@@ -69,6 +69,20 @@ def get_corpus_summary() -> CorpusSummaryResponse:
     )
 
 
+@router.get("/differential")
+def get_differential_info():
+    """Returns capabilities and supported metamorphic relation types for capture differential testing."""
+    return {
+        "status": "available",
+        "supported_relations": [
+            MetamorphicRelationType.FORMAT_EQUIVALENCE.value,
+            MetamorphicRelationType.TIMESTAMP_SHIFT.value,
+            MetamorphicRelationType.NOISE_INJECTION.value,
+        ],
+        "default_shift_seconds": 60,
+    }
+
+
 @router.get("/{capture_id}", response_model=CaptureManifestItem)
 def get_corpus_capture(capture_id: str) -> CaptureManifestItem:
     """Retrieves metadata and ground-truth expectation for a specific capture."""

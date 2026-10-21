@@ -77,5 +77,20 @@ fw-edge.twin.internal,192.168.1.1,00:11:22:33:44:01,firewall
 
 
 def test_importer_factory_unsupported():
-    with pytest.raises(ConfigurationImportError):
+    with pytest.raises(ConfigurationImportError, match="Unsupported configuration format"):
         get_importer("unknown_format", "src")
+
+
+def test_importer_factory_serialization_format_detection():
+    routes_json = '[{"destination": "10.0.0.0/24", "next_hop": "192.168.1.1"}]'
+    importer = get_importer("json", "src", content=routes_json)
+    assert isinstance(importer, RoutingTableImporter)
+
+    inv_csv = "device_id,hostname\ndev1,host1"
+    importer2 = get_importer("csv", "src", content=inv_csv)
+    assert isinstance(importer2, DeviceInventoryImporter)
+
+
+def test_importer_factory_serialization_format_without_content():
+    with pytest.raises(ConfigurationImportError, match="file serialization format"):
+        get_importer("json", "src")

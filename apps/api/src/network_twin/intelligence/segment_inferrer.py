@@ -9,12 +9,16 @@ from network_twin.models.intelligence import NetworkSegment
 logger = logging.getLogger(__name__)
 
 
-def infer_cidr_prefix(ip_str: str) -> str:
-    """Computes default subnet prefix for an IP based on address family and conventions."""
+def infer_cidr_prefix(ip_str: str) -> str | None:
+    """Computes default subnet prefix for an IP based on address family and conventions.
+    Returns None for multicast, loopback, broadcast, or unspecified addresses."""
     try:
         ip_obj = ipaddress.ip_address(ip_str.strip())
     except ValueError:
-        return "0.0.0.0/0"
+        return None
+
+    if ip_obj.is_multicast or ip_obj.is_loopback or ip_obj.is_unspecified or ip_obj.is_reserved:
+        return None
 
     if ip_obj.version == 4:
         # Standard IPv4 local subnetting assumption (/24 default for LANs)
@@ -33,17 +37,20 @@ class SegmentInferrer:
         # Key: cidr_prefix -> dict of metadata
         self._segments: dict[str, dict] = {}
 
-    def observe_ip(self, ip_str: str, timestamp: datetime, source_id: str) -> NetworkSegment:
+    def observe_ip(self, ip_str: str, timestamp: datetime, source_id: str) -> NetworkSegment | None:
         cidr = infer_cidr_prefix(ip_str)
+        if not cidr:
+            return None
+
         try:
             ip_obj = ipaddress.ip_address(ip_str.strip())
             version_str = f"IPv{ip_obj.version}"
         except ValueError:
-            version_str = "IPv4"
+            return None
 
-        # Check candidate gateway
+        # Check candidate gateway (never for multicast or reserved)
         is_candidate_gw = False
-        if version_str == "IPv4":
+        if version_str == "IPv4" and not ip_obj.is_multicast:
             octets = ip_str.strip().split(".")
             if len(octets) == 4 and octets[3] in ("1", "254"):
                 is_candidate_gw = True

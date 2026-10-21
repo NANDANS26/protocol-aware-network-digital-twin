@@ -244,6 +244,8 @@ class TopologySnapshot(BaseModel):
     created_at_iso: str | None = Field(default=None, description="ISO 8601 formatted creation timestamp")
     source_captures: list[str] = Field(default_factory=list, description="IDs of contributing captures")
     source_configs: list[str] = Field(default_factory=list, description="IDs of contributing configuration imports")
+    capture_id: str | None = Field(default=None, description="Primary source capture ID if derived from capture")
+    analysis_job_id: str | None = Field(default=None, description="Originating analysis job ID if derived from capture")
     identity_policy_version: str = Field(default="1.0.0")
     graph_algorithm_version: str = Field(default="1.0.0")
     node_count: int
@@ -256,6 +258,10 @@ class TopologySnapshot(BaseModel):
     def sync_created_at_iso(self) -> Self:
         if not self.created_at_iso and self.created_at:
             self.created_at_iso = self.created_at.isoformat()
+        if not self.capture_id and self.metadata:
+            self.capture_id = self.metadata.get("capture_id")
+        if not self.analysis_job_id and self.metadata:
+            self.analysis_job_id = self.metadata.get("analysis_job_id")
         return self
 
 

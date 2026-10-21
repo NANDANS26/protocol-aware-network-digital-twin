@@ -8,6 +8,7 @@ import copy
 import hashlib
 import ipaddress
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -69,7 +70,8 @@ class ScenarioEngine:
         # 1. Deep clone base model for total isolation
         cf_model = copy.deepcopy(base_model)
         cf_model.model_id = f"model-cf-{uuid.uuid4().hex[:10]}"
-        cf_model.name = f"{base_model.name} [Counterfactual: {scenario.name}]"
+        clean_base_name = re.sub(r"(\s*\[Counterfactual:[^\]]*\])+", "", base_model.name).strip()
+        cf_model.name = f"{clean_base_name} [Counterfactual: {scenario.name}]"
         cf_model.is_counterfactual = True
         cf_model.parent_model_id = base_model.model_id
         cf_model.created_at_iso = datetime.now(UTC).isoformat()
@@ -117,6 +119,12 @@ class ScenarioEngine:
                         counterfactual_status=res_cf.status,
                         change_type=change_type,
                         explanation=explanation,
+                        baseline_reason=res_base.reason_code.value
+                        if hasattr(res_base, "reason_code") and res_base.reason_code
+                        else None,
+                        counterfactual_reason=res_cf.reason_code.value
+                        if hasattr(res_cf, "reason_code") and res_cf.reason_code
+                        else None,
                     )
                 )
 

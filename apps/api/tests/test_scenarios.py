@@ -356,3 +356,69 @@ def test_counterfactual_result_contract_compatibility():
     assert res.newly_blocked_paths_count == 3
     assert res.security_regressions_count == 1
     assert res.created_at_iso == res.executed_at_iso
+
+
+def test_scenario_name_compounding_prevention(scenario_test_model: NetworkModel):
+    """Verifies that running scenarios sequentially against cloned models does not compound tags."""
+    engine = ScenarioEngine()
+    scenario = SimulationScenario(
+        scenario_id="scen-test-name",
+        name="Emergency External Lockdown",
+        base_model_id=scenario_test_model.model_id,
+        actions=[
+            SimulationAction(
+                action_type=SimulationActionType.ADD_ROUTE,
+                target_node_id="router-1",
+                parameters={"destination_prefix": "10.99.0.0/24"},
+            )
+        ],
+    )
+    # First run
+    cf1, _ = engine.run_scenario(scenario_test_model, scenario)
+    assert cf1.name == "Scenario Test Network [Counterfactual: Emergency External Lockdown]"
+
+    # Second run using cf1 as base model
+    cf2, _ = engine.run_scenario(cf1, scenario)
+    assert cf2.name == "Scenario Test Network [Counterfactual: Emergency External Lockdown]"
+    assert "[Counterfactual: Emergency External Lockdown] [Counterfactual:" not in cf2.name
+
+
+def test_metadata_store_counterfactual_model_filtering(tmp_path):
+    """Verifies MetadataStore filters models by is_counterfactual flag."""
+    from network_twin.config import AppSettings
+    from network_twin.storage.metadata_store import MetadataStore
+
+    test_settings = AppSettings(data_dir=str(tmp_path))
+    store = MetadataStore(test_settings)
+
+    base = NetworkModel(
+        model_id="model-base-1",
+        name="Base Network Model",
+        source_snapshot_id="snap-1",
+        source_snapshot_fingerprint="fp-snap-1",
+        fingerprint="fp-base-1",
+        is_counterfactual=False,
+    )
+    cf = NetworkModel(
+        model_id="model-cf-1",
+        name="Counterfactual Model",
+        source_snapshot_id="snap-1",
+        source_snapshot_fingerprint="fp-snap-1",
+        fingerprint="fp-cf-1",
+        is_counterfactual=True,
+        parent_model_id="model-base-1",
+    )
+
+    store.save_network_model(base)
+    store.save_network_model(cf)
+
+    all_models = store.list_network_models()
+    assert len(all_models) == 2
+
+    baselines_only = store.list_network_models(is_counterfactual=False)
+    assert len(baselines_only) == 1
+    assert baselines_only[0].model_id == "model-base-1"
+
+    counterfactuals_only = store.list_network_models(is_counterfactual=True)
+    assert len(counterfactuals_only) == 1
+    assert counterfactuals_only[0].model_id == "model-cf-1"

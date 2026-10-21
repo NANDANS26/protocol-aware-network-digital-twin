@@ -103,40 +103,57 @@ async def generate_sequences(req: SequenceGenerateRequest | None = None) -> list
 @router.get("/coverage-gaps")
 async def get_coverage_gaps():
     """Returns explicitly documented protocol coverage gaps and unsupported semantics."""
+    supported = [
+        "RFC 793/9293 TCP 3-Way Handshake & 4-Way Teardown",
+        "TCP Retransmission & Out-of-Order Gap Detection",
+        "Bidirectional Flow Table State Isolation",
+        "Midstream Connection State Recovery",
+        "TCP Stream Segment Reassembly (DirectionReassembler)",
+        "DNS Query/Response Transaction Matching",
+        "HTTP/1.1 Request/Response Method & Host Header Parsing",
+        "TLS ClientHello SNI & ALPN Protocol Extraction",
+    ]
+    gaps_raw = [
+        {
+            "subsystem": "IP Fragmentation Reassembly",
+            "status": "DECODE_ONLY_NO_REASSEMBLY_CACHE",
+            "details": "IPv4 and IPv6 fragment headers, identification, and fragment offsets are decoded per-packet. The engine currently lacks an IP reassembly buffer to merge fragmented L4 payloads prior to transport decoding.",
+        },
+        {
+            "subsystem": "TLS Handshake Decryption",
+            "status": "METADATA_EXTRACTION_ONLY",
+            "details": "Extracts unencrypted ClientHello and ServerHello parameters (SNI, ALPN, cipher suites). Record layer decryption and TLS session state tracking are out-of-scope.",
+        },
+        {
+            "subsystem": "HTTP/2 Multiplexing & HPACK",
+            "status": "UNSUPPORTED",
+            "details": "HTTP parsing supports RFC 9112 HTTP/1.1 cleartext. Binary frame multiplexing and HPACK decompression are not implemented.",
+        },
+        {
+            "subsystem": "QUIC Crypto State",
+            "status": "CLASSIFICATION_ONLY",
+            "details": "QUIC Initial and Handshake packets are heuristically classified without full variable-length integer parsing or crypto state derivation.",
+        },
+    ]
+    # Enriched dual-contract items
+    enriched_gaps = [
+        {
+            **g,
+            "feature": g["subsystem"],
+            "limitation_status": g["status"],
+            "description": g["details"],
+            "behavior": g["details"],
+        }
+        for g in gaps_raw
+    ]
+
     return {
         "status": "documented",
-        "supported_stateful_semantics": [
-            "RFC 793/9293 TCP 3-Way Handshake & 4-Way Teardown",
-            "TCP Retransmission & Out-of-Order Gap Detection",
-            "Bidirectional Flow Table State Isolation",
-            "Midstream Connection State Recovery",
-            "TCP Stream Segment Reassembly (DirectionReassembler)",
-            "DNS Query/Response Transaction Matching",
-            "HTTP/1.1 Request/Response Method & Host Header Parsing",
-            "TLS ClientHello SNI & ALPN Protocol Extraction",
-        ],
-        "coverage_gaps_and_limitations": [
-            {
-                "subsystem": "IP Fragmentation Reassembly",
-                "status": "DECODE_ONLY_NO_REASSEMBLY_CACHE",
-                "details": "IPv4 and IPv6 fragment headers, identification, and fragment offsets are decoded per-packet. The engine currently lacks an IP reassembly buffer to merge fragmented L4 payloads prior to transport decoding.",
-            },
-            {
-                "subsystem": "TLS Handshake Decryption",
-                "status": "METADATA_EXTRACTION_ONLY",
-                "details": "Extracts unencrypted ClientHello and ServerHello parameters (SNI, ALPN, cipher suites). Record layer decryption and TLS session state tracking are out-of-scope.",
-            },
-            {
-                "subsystem": "HTTP/2 Multiplexing & HPACK",
-                "status": "UNSUPPORTED",
-                "details": "HTTP parsing supports RFC 9112 HTTP/1.1 cleartext. Binary frame multiplexing and HPACK decompression are not implemented.",
-            },
-            {
-                "subsystem": "QUIC Crypto State",
-                "status": "CLASSIFICATION_ONLY",
-                "details": "QUIC Initial and Handshake packets are heuristically classified without full variable-length integer parsing or crypto state derivation.",
-            },
-        ],
+        "engine_version": "v1.2.0-native-cpp",
+        "supported_stateful_semantics": supported,
+        "supported_capabilities": supported,
+        "coverage_gaps_and_limitations": enriched_gaps,
+        "documented_coverage_gaps": enriched_gaps,
     }
 
 

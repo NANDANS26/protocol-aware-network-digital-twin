@@ -151,7 +151,6 @@ AnalysisReport AnalysisPipeline::run() {
         std::string app_layer_json = "null";
 
         size_t bytes_consumed = 0;
-        size_t bytes_remaining = pkt.data.size();
 
         // 1. Link Layer
         std::span<const uint8_t> l2_payload = pkt.data;
@@ -190,6 +189,7 @@ AnalysisReport AnalysisPipeline::run() {
                     decoders::DecodeResult ip_res = decoders::IPv4Decoder::decode(l2_payload, ip4, ip4_diag);
                     if (ip_res == decoders::DecodeResult::Success) {
                         report.protocol_counts["IPv4"]++;
+                        bytes_consumed += (l2_payload.size() - ip4.payload.size());
                         if (ip4.checksum_status == decoders::ChecksumStatus::Invalid) {
                             parser_status = "checksum_error";
                             diag_code = "IPV4_CHECKSUM_MISMATCH";
@@ -226,6 +226,7 @@ AnalysisReport AnalysisPipeline::run() {
                             decoders::DecodeResult tcp_res = decoders::TcpDecoder::decode(ip4.payload, tcp, tcp_diag);
                             if (tcp_res == decoders::DecodeResult::Success) {
                                 report.protocol_counts["TCP"]++;
+                                bytes_consumed += (ip4.payload.size() - tcp.payload.size());
 
                                 std::ostringstream tl;
                                 tl << "{\"protocol\":\"TCP\","
@@ -377,6 +378,7 @@ AnalysisReport AnalysisPipeline::run() {
                             decoders::DecodeResult udp_res = decoders::UdpDecoder::decode(ip4.payload, udp, udp_diag);
                             if (udp_res == decoders::DecodeResult::Success) {
                                 report.protocol_counts["UDP"]++;
+                                bytes_consumed += (ip4.payload.size() - udp.payload.size());
 
                                 std::ostringstream tl;
                                 tl << "{\"protocol\":\"UDP\","
@@ -419,62 +421,92 @@ AnalysisReport AnalysisPipeline::run() {
                                         preview += (ch >= 32 && ch <= 126) ? static_cast<char>(ch) : '.';
                                     }
 
-                                    protocols::DnsMessage dns_msg;
-                                    std::string dns_diag;
-                                    if (protocols::DnsParser::parse(udp.payload, false, dns_msg, dns_diag)) {
-                                        report.protocol_counts["DNS"]++;
-                                        flow_app_proto[flow_id_str] = "DNS";
-
-                                        if (dns_msg.is_response) {
-                                            report.dns_responses++;
-                                            fentry.dns_response_count++;
-                                        } else {
-                                            report.dns_queries++;
-                                            fentry.dns_query_count++;
-                                        }
+                                    protocols::PtpMessage ptp_msg;
+                                    std::string ptp_diag;
+                                    bool is_ptp_port = (udp.source_port == 319 || udp.destination_port == 319 ||
+                                                        udp.source_port == 320 || udp.destination_port == 320);
+                                    if ((is_ptp_port || udp.payload.size() >= 34) && protocols::PtpParser::parse(udp.payload, ptp_msg, ptp_diag)) {
+                                        report.protocol_counts["PTP"]++;
+                                        report.ptp_messages++;
+                                        flow_app_proto[flow_id_str] = "PTP";
+                                        flow_info[flow_id_str] = ptp_msg.message_type_name + " (seq " + std::to_string(ptp_msg.sequence_id) + ")";
+                                        bytes_consumed += udp.payload.size();
 
                                         std::ostringstream al;
-                                        al << "{\"protocol\":\"DNS\","
+                                        al << "{\"protocol\":\"PTP\","
                                            << "\"payload_length_bytes\":" << udp.payload.size() << ","
                                            << "\"payload_hash_sha256\":\"" << sha << "\","
                                            << "\"sanitized_preview\":\"" << escape_json(preview) << "\","
                                            << "\"protocol_metadata\":{"
-                                           << "\"transaction_id\":" << dns_msg.transaction_id << ","
-                                           << "\"is_response\":" << (dns_msg.is_response ? "true" : "false") << ","
-                                           << "\"response_code\":" << static_cast<int>(dns_msg.response_code);
-
-                                        if (!dns_msg.questions.empty()) {
-                                            al << ",\"query_name\":\"" << escape_json(dns_msg.questions[0].name) << "\"";
-                                            al << ",\"query_type\":\"" << escape_json(protocols::to_string(dns_msg.questions[0].type)) << "\"";
-                                            flow_info[flow_id_str] = dns_msg.questions[0].name;
-                                        }
-                                        if (!dns_msg.answers.empty()) {
-                                            al << ",\"answers_count\":" << dns_msg.answers.size();
-                                            al << ",\"first_answer\":\"" << escape_json(dns_msg.answers[0].rdata_string) << "\"";
-                                            if (flow_info[flow_id_str].empty()) {
-                                                flow_info[flow_id_str] = dns_msg.answers[0].rdata_string;
-                                            }
-                                        }
-                                        al << "}}";
+                                           << "\"version\":" << static_cast<int>(ptp_msg.version) << ","
+                                           << "\"version_name\":\"" << escape_json(ptp_msg.version_name) << "\","
+                                           << "\"message_type\":" << static_cast<int>(ptp_msg.message_type) << ","
+                                           << "\"message_type_name\":\"" << escape_json(ptp_msg.message_type_name) << "\","
+                                           << "\"domain_number\":" << static_cast<int>(ptp_msg.domain_number) << ","
+                                           << "\"sequence_id\":" << ptp_msg.sequence_id << ","
+                                           << "\"source_port_identity\":\"" << escape_json(ptp_msg.source_port_identity) << "\","
+                                           << "\"correction_field_ns\":" << ptp_msg.correction_field_ns << ","
+                                           << "\"transport\":\"UDP\""
+                                           << "}}";
                                         app_layer_json = al.str();
-                                    } else {
-                                        protocols::QuicClassification quic_meta;
-                                        if (protocols::QuicClassifier::classify(udp.payload, quic_meta) && quic_meta.is_quic) {
-                                            report.protocol_counts["QUIC"]++;
-                                            report.quic_datagrams++;
-                                            flow_app_proto[flow_id_str] = "QUIC";
+                                    } else if (!is_ptp_port) {
+                                        protocols::DnsMessage dns_msg;
+                                        std::string dns_diag;
+                                        if (protocols::DnsParser::parse(udp.payload, false, dns_msg, dns_diag)) {
+                                            report.protocol_counts["DNS"]++;
+                                            flow_app_proto[flow_id_str] = "DNS";
+
+                                            if (dns_msg.is_response) {
+                                                report.dns_responses++;
+                                                fentry.dns_response_count++;
+                                            } else {
+                                                report.dns_queries++;
+                                                fentry.dns_query_count++;
+                                            }
 
                                             std::ostringstream al;
-                                            al << "{\"protocol\":\"QUIC\","
+                                            al << "{\"protocol\":\"DNS\","
                                                << "\"payload_length_bytes\":" << udp.payload.size() << ","
                                                << "\"payload_hash_sha256\":\"" << sha << "\","
                                                << "\"sanitized_preview\":\"" << escape_json(preview) << "\","
                                                << "\"protocol_metadata\":{"
-                                               << "\"version\":\"" << escape_json(quic_meta.version_name) << "\","
-                                               << "\"dcid\":\"" << escape_json(protocols::QuicClassifier::hex_cid(quic_meta.destination_connection_id)) << "\""
-                                               << "}}";
+                                               << "\"transaction_id\":" << dns_msg.transaction_id << ","
+                                               << "\"is_response\":" << (dns_msg.is_response ? "true" : "false") << ","
+                                               << "\"response_code\":" << static_cast<int>(dns_msg.response_code);
+
+                                            if (!dns_msg.questions.empty()) {
+                                                al << ",\"query_name\":\"" << escape_json(dns_msg.questions[0].name) << "\"";
+                                                al << ",\"query_type\":\"" << escape_json(protocols::to_string(dns_msg.questions[0].type)) << "\"";
+                                                flow_info[flow_id_str] = dns_msg.questions[0].name;
+                                            }
+                                            if (!dns_msg.answers.empty()) {
+                                                al << ",\"answers_count\":" << dns_msg.answers.size();
+                                                al << ",\"first_answer\":\"" << escape_json(dns_msg.answers[0].rdata_string) << "\"";
+                                                if (flow_info[flow_id_str].empty()) {
+                                                    flow_info[flow_id_str] = dns_msg.answers[0].rdata_string;
+                                                }
+                                            }
+                                            al << "}}";
                                             app_layer_json = al.str();
-                                            flow_info[flow_id_str] = quic_meta.version_name;
+                                        } else {
+                                            protocols::QuicClassification quic_meta;
+                                            if (protocols::QuicClassifier::classify(udp.payload, quic_meta) && quic_meta.is_quic) {
+                                                report.protocol_counts["QUIC"]++;
+                                                report.quic_datagrams++;
+                                                flow_app_proto[flow_id_str] = "QUIC";
+
+                                                std::ostringstream al;
+                                                al << "{\"protocol\":\"QUIC\","
+                                                   << "\"payload_length_bytes\":" << udp.payload.size() << ","
+                                                   << "\"payload_hash_sha256\":\"" << sha << "\","
+                                                   << "\"sanitized_preview\":\"" << escape_json(preview) << "\","
+                                                   << "\"protocol_metadata\":{"
+                                                   << "\"version\":\"" << escape_json(quic_meta.version_name) << "\","
+                                                   << "\"dcid\":\"" << escape_json(protocols::QuicClassifier::hex_cid(quic_meta.destination_connection_id)) << "\""
+                                                   << "}}";
+                                                app_layer_json = al.str();
+                                                flow_info[flow_id_str] = quic_meta.version_name;
+                                            }
                                         }
                                     }
                                 }
@@ -646,6 +678,7 @@ AnalysisReport AnalysisPipeline::run() {
                     decoders::DecodeResult arp_res = decoders::ArpDecoder::decode(l2_payload, arp, arp_diag);
                     if (arp_res == decoders::DecodeResult::Success) {
                         report.protocol_counts["ARP"]++;
+                        bytes_consumed += l2_payload.size();
 
                         std::ostringstream nl;
                         nl << "{\"version\":null,"
@@ -655,6 +688,46 @@ AnalysisReport AnalysisPipeline::run() {
                            << "\"identification\":null,"
                            << "\"flags\":null}";
                         network_layer_json = nl.str();
+                    }
+                } else if (eth.ether_type == 0x88F7) { // PTP over IEEE 802.3 (Direct Ethernet)
+                    report.protocol_counts["PTP"]++;
+                    report.ptp_messages++;
+
+                    protocols::PtpMessage ptp_msg;
+                    std::string ptp_diag;
+                    if (protocols::PtpParser::parse(l2_payload, ptp_msg, ptp_diag)) {
+                        bytes_consumed += l2_payload.size();
+
+                        std::string sha = crypto::sha256_hex(l2_payload);
+                        std::string preview = "";
+                        size_t preview_len = (std::min)(l2_payload.size(), config_.max_payload_preview_bytes);
+                        for (size_t b = 0; b < preview_len; ++b) {
+                            uint8_t ch = l2_payload[b];
+                            preview += (ch >= 32 && ch <= 126) ? static_cast<char>(ch) : '.';
+                        }
+
+                        std::ostringstream al;
+                        al << "{\"protocol\":\"PTP\","
+                           << "\"payload_length_bytes\":" << l2_payload.size() << ","
+                           << "\"payload_hash_sha256\":\"" << sha << "\","
+                           << "\"sanitized_preview\":\"" << escape_json(preview) << "\","
+                           << "\"protocol_metadata\":{"
+                           << "\"version\":" << static_cast<int>(ptp_msg.version) << ","
+                           << "\"version_name\":\"" << escape_json(ptp_msg.version_name) << "\","
+                           << "\"message_type\":" << static_cast<int>(ptp_msg.message_type) << ","
+                           << "\"message_type_name\":\"" << escape_json(ptp_msg.message_type_name) << "\","
+                           << "\"domain_number\":" << static_cast<int>(ptp_msg.domain_number) << ","
+                           << "\"sequence_id\":" << ptp_msg.sequence_id << ","
+                           << "\"source_port_identity\":\"" << escape_json(ptp_msg.source_port_identity) << "\","
+                           << "\"correction_field_ns\":" << ptp_msg.correction_field_ns << ","
+                           << "\"transport\":\"Ethernet\""
+                           << "}}";
+                        app_layer_json = al.str();
+                    } else {
+                        parser_status = "malformed";
+                        diag_code = "PTP_DECODE_FAILED";
+                        diag_msg = ptp_diag;
+                        report.parser_status_counts["malformed"]++;
                     }
                 }
             } else {
@@ -819,7 +892,8 @@ std::string AnalysisReport::to_json() const {
         << "\"http_requests\":" << http_requests << ","
         << "\"http_responses\":" << http_responses << ","
         << "\"tls_handshakes\":" << tls_handshakes << ","
-        << "\"quic_datagrams\":" << quic_datagrams << ",";
+        << "\"quic_datagrams\":" << quic_datagrams << ","
+        << "\"ptp_messages\":" << ptp_messages << ",";
 
     // Protocol counts
     oss << "\"protocol_counts\":{";

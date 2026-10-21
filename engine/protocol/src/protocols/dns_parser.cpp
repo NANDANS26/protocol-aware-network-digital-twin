@@ -131,8 +131,27 @@ bool DnsParser::parse(
     const uint16_t nscount = (static_cast<uint16_t>(dns_data[8]) << 8) | dns_data[9];
     const uint16_t arcount = (static_cast<uint16_t>(dns_data[10]) << 8) | dns_data[11];
 
+    // A valid DNS message must contain at least one question or record
+    if (qdcount == 0 && ancount == 0 && nscount == 0 && arcount == 0) {
+        diagnostic = "Empty DNS message: all record counts are zero";
+        return false;
+    }
+
     out_msg.is_response = (flags & 0x8000) != 0;
     out_msg.opcode = static_cast<uint8_t>((flags >> 11) & 0x0F);
+
+    // Standard DNS opcodes: 0 (Query), 1 (IQuery), 2 (Status), 4 (Notify), 5 (Update)
+    if (out_msg.opcode > 5 || out_msg.opcode == 3) {
+        diagnostic = "Invalid DNS opcode: " + std::to_string(out_msg.opcode);
+        return false;
+    }
+
+    // Section count sanity check
+    if (qdcount > 100 || ancount > 500 || nscount > 500 || arcount > 500) {
+        diagnostic = "DNS section count sanity limit exceeded";
+        return false;
+    }
+
     out_msg.authoritative = (flags & 0x0400) != 0;
     out_msg.truncated = (flags & 0x0200) != 0;
     out_msg.recursion_desired = (flags & 0x0100) != 0;
@@ -225,6 +244,11 @@ bool DnsParser::parse(
 
     // 4. Parse Additional Records
     parse_rr_section(arcount, out_msg.additionals);
+
+    if (out_msg.questions.empty() && out_msg.answers.empty() && out_msg.authorities.empty() && out_msg.additionals.empty()) {
+        diagnostic = "No DNS questions or resource records could be parsed";
+        return false;
+    }
 
     return true;
 }

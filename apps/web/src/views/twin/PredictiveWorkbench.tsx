@@ -78,13 +78,19 @@ export const PredictiveWorkbench: React.FC = () => {
         apiClient.listPredictiveRecords(),
         apiClient.getPredictiveLimitations().catch(() => null),
       ]);
-      setDatasets(dsList);
-      if (dsList.length > 0 && !selectedDataset) {
-        setSelectedDataset(dsList[0] ?? null);
+      const uniqueDatasets = Array.from(
+        new Map(dsList.map((d) => [d.dataset_id, d])).values()
+      );
+      setDatasets(uniqueDatasets);
+      if (uniqueDatasets.length > 0 && !selectedDataset) {
+        setSelectedDataset(uniqueDatasets[0] ?? null);
       }
-      setModels(mdList);
-      if (mdList.length > 0 && !selectedModel) {
-        setSelectedModel(mdList[0] ?? null);
+      const uniqueModels = Array.from(
+        new Map(mdList.map((m) => [m.model_id, m])).values()
+      );
+      setModels(uniqueModels);
+      if (uniqueModels.length > 0 && !selectedModel) {
+        setSelectedModel(uniqueModels[0] ?? null);
       }
       setPredictions(predsList);
       if (lims) setLimitations(lims);
@@ -111,7 +117,7 @@ export const PredictiveWorkbench: React.FC = () => {
         use_synthetic_canonical: useSynthetic,
         synthetic_sample_count: 80,
       });
-      setDatasets((prev) => [newDs, ...prev]);
+      setDatasets((prev) => [newDs, ...prev.filter((d) => d.dataset_id !== newDs.dataset_id)]);
       setSelectedDataset(newDs);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Dataset extraction failed');
@@ -408,9 +414,9 @@ export const PredictiveWorkbench: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800/50">
-                      {datasets.map((ds) => (
+                      {datasets.map((ds, idx) => (
                         <tr
-                          key={ds.dataset_id}
+                          key={`${ds.dataset_id}-${idx}`}
                           onClick={() => setSelectedDataset(ds)}
                           className={`cursor-pointer transition hover:bg-slate-800/40 ${
                             selectedDataset?.dataset_id === ds.dataset_id ? 'bg-blue-950/20' : ''
@@ -425,7 +431,7 @@ export const PredictiveWorkbench: React.FC = () => {
                           <td className="py-2.5 px-3 font-mono">{ds.total_samples}</td>
                           <td className="py-2.5 px-3 font-mono">{ds.time_window_sec}s</td>
                           <td className="py-2.5 px-3 font-mono text-gray-500">
-                            {ds.hash_sha256.slice(0, 8)}...
+                            {ds.hash_sha256 ? `${ds.hash_sha256.slice(0, 8)}...` : 'N/A'}
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             <button

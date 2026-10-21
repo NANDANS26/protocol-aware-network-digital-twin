@@ -337,7 +337,7 @@ class DeviceInventoryImporter(BaseImporter):
                 return []
 
 
-def get_importer(format_name: str, source_name: str) -> BaseImporter:
+def get_importer(format_name: str, source_name: str, content: str | None = None) -> BaseImporter:
     fmt = format_name.lower().strip()
     if fmt in ("routing", "routing_table", "routes"):
         return RoutingTableImporter(source_name)
@@ -345,6 +345,21 @@ def get_importer(format_name: str, source_name: str) -> BaseImporter:
         return NeighborTableImporter(source_name)
     elif fmt in ("inventory", "devices", "assets"):
         return DeviceInventoryImporter(source_name)
+    elif fmt in ("json", "csv"):
+        if content:
+            lower_c = content.lower()
+            if "destination_prefix" in lower_c or "next_hop" in lower_c:
+                return RoutingTableImporter(source_name)
+            if (
+                "ip_address" in lower_c
+                and ("mac_address" in lower_c or "mac" in lower_c)
+                and "device_id" not in lower_c
+            ):
+                return NeighborTableImporter(source_name)
+            return DeviceInventoryImporter(source_name)
+        raise ConfigurationImportError(
+            f"'{format_name}' is a file serialization format. Supported semantic configuration formats: 'routing_table', 'neighbor_table', 'inventory'."
+        )
     else:
         raise ConfigurationImportError(
             f"Unsupported configuration format '{format_name}'. Supported formats: 'routing_table', 'neighbor_table', 'inventory'."

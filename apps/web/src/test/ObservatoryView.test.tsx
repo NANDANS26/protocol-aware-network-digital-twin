@@ -144,4 +144,100 @@ describe('ObservatoryView Component', () => {
       expect(screen.getByText('flow-dns-1')).toBeInTheDocument();
     });
   });
+
+  it('correctly displays PTP capture telemetry with 0 DNS and accurate parser integrity', async () => {
+    const mockPtpJob: AnalysisJob = {
+      job_id: 'test-ptp-job',
+      filename: 'IEEE1588_Precision Time Protocol-PTPv2-Sequence.pcap',
+      file_size_bytes: 3312,
+      status: 'completed',
+      created_at: '2026-04-19T08:00:00Z',
+      completed_at: '2026-04-19T08:00:01Z',
+      error_message: null,
+      summary: {
+        capture_file: 'IEEE1588_Precision Time Protocol-PTPv2-Sequence.pcap',
+        total_packets: 39,
+        total_bytes: 3312,
+        wire_bytes: 3312,
+        duration_ms: 0.95,
+        start_time_iso: '2007-08-08T09:18:39.342Z',
+        end_time_iso: '2007-08-08T09:18:59.817Z',
+        packets_per_sec: 40000,
+        throughput_mbps: 27.6,
+        total_flows: 3,
+        dns_queries: 0,
+        dns_responses: 0,
+        http_requests: 0,
+        http_responses: 0,
+        tls_handshakes: 0,
+        quic_datagrams: 0,
+        ptp_messages: 39,
+        protocol_counts: {
+          Ethernet: 39,
+          IPv4: 25,
+          UDP: 25,
+          PTP: 39,
+        },
+        parser_status_counts: {
+          ok: 39,
+        },
+        tcp_state_counts: {},
+        anomalies: [],
+        flows: [
+          {
+            flow_id: 'flow-ptp-1',
+            ip_proto: 'UDP',
+            src_ip: '192.168.2.6',
+            src_port: 319,
+            dst_ip: '224.0.0.107',
+            dst_port: 319,
+            vlan_id: null,
+            state: 'STATELESS',
+            packets_forward: 16,
+            packets_reverse: 0,
+            bytes_forward: 1536,
+            bytes_reverse: 0,
+            duration_ms: 12891.4,
+            app_protocol: 'PTP',
+            info: 'Pdelay_Req (seq 40535)',
+            retransmissions: 0,
+            out_of_order: 0,
+          },
+        ],
+      },
+    };
+
+    vi.mocked(apiClient.runDemoAnalysis).mockResolvedValue({
+      job_id: 'test-ptp-job',
+      filename: 'IEEE1588_Precision Time Protocol-PTPv2-Sequence.pcap',
+      file_size_bytes: 3312,
+      status: 'completed',
+      message: 'Analyzed',
+      summary: mockPtpJob.summary,
+    });
+    vi.mocked(apiClient.getJob).mockResolvedValue(mockPtpJob);
+
+    render(<ObservatoryView />);
+    const sampleBtn = screen.getByRole('button', { name: /^Load Sample PCAP$/i });
+    fireEvent.click(sampleBtn);
+
+    await waitFor(() => {
+      // Packets and bytes match
+      expect(screen.getAllByText('39').length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/3,312 bytes/i)).toBeInTheDocument();
+
+      // App transactions displays 39 PTP transactions, NOT 25 DNS
+      expect(screen.getByText(/39 PTP/i)).toBeInTheDocument();
+      expect(screen.queryByText(/25 DNS/i)).not.toBeInTheDocument();
+
+      // Parser integrity reports ok count and percentage
+      expect(screen.getByText(/\/ 39/)).toBeInTheDocument();
+      expect(screen.getByText(/100.0% decoded ok · 0 errors/i)).toBeInTheDocument();
+
+      // Flow displays PTP app protocol and info
+      expect(screen.getByText('flow-ptp-1')).toBeInTheDocument();
+      expect(screen.getAllByText('PTP').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('Pdelay_Req (seq 40535)')).toBeInTheDocument();
+    });
+  });
 });

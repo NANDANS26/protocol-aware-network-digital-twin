@@ -77,6 +77,22 @@ class AnalysisService:
                 return candidate
         return None
 
+    def find_rust_pipeline_binary(self) -> Path | None:
+        """Finds the compiled Rust evidence_pipeline executable."""
+        project_root = Path(__file__).resolve().parents[5]
+        candidates = [
+            project_root / "build" / "engine" / "Release" / "evidence_pipeline.exe",
+            project_root / "packages" / "evidence_pipeline" / "target" / "release" / "evidence_pipeline.exe",
+            project_root / "packages" / "evidence_pipeline" / "target" / "debug" / "evidence_pipeline.exe",
+            project_root / "build" / "engine" / "evidence_pipeline.exe",
+            project_root / "build" / "engine" / "Release" / "evidence_pipeline",
+            project_root / "packages" / "evidence_pipeline" / "target" / "release" / "evidence_pipeline",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return None
+
     def is_engine_available(self) -> bool:
         return self.find_engine_binary() is not None
 
@@ -86,8 +102,8 @@ class AnalysisService:
         magic = content[:4]
         return magic in VALID_PCAP_MAGICS
 
-    def analyze_capture(self, filename: str, content: bytes) -> AnalysisJob:
-        """Saves capture file, executes C++ engine, persists metadata & Parquet, and extracts intelligence."""
+    def analyze_capture(self, filename: str, content: bytes, capture_id: str | None = None) -> AnalysisJob:
+        """Saves capture file, executes C++ engine, validates via Rust pipeline, persists metadata & Parquet, and extracts intelligence."""
         if Path(filename).name != filename or ".." in filename:
             raise ValueError("Invalid filename: Path traversal detected.")
 
@@ -100,6 +116,7 @@ class AnalysisService:
                 "C++ Protocol Analysis Engine binary not found. Please compile the engine before running analysis."
             )
 
+        actual_capture_id = capture_id or str(uuid.uuid4())
         job_id = str(uuid.uuid4())
         created_at = datetime.now(UTC)
         content_sha256 = hashlib.sha256(content).hexdigest()
@@ -108,28 +125,34 @@ class AnalysisService:
 
         safe_filename = Path(filename).name
         uploads_dir = (Path(self.config.data_dir) / "uploads").resolve()
-        upload_path = (uploads_dir / f"{job_id}_{safe_filename}").resolve()
+        upload_path = (uploads_dir / f"{actual_capture_id}_{safe_filename}").resolve()
         if not upload_path.is_relative_to(uploads_dir):
             raise ValueError("Invalid filename: Path traversal detected.")
-        events_path = Path(self.config.data_dir) / "results" / f"{job_id}.events.jsonl"
+        raw_events_path = Path(self.config.data_dir) / "results" / f"{job_id}.raw_events.jsonl"
+        canonical_events_path = Path(self.config.data_dir) / "results" / f"{job_id}.events.jsonl"
+        quarantine_path = Path(self.config.data_dir) / "results" / f"{job_id}.quarantine.jsonl"
+        report_path = Path(self.config.data_dir) / "results" / f"{job_id}.report.json"
         summary_path = Path(self.config.data_dir) / "results" / f"{job_id}.summary.json"
 
         # Write uploaded bytes to disk
         with open(upload_path, "wb") as f:
             f.write(content)
 
-        # Register capture in persistent metadata catalog
-        cap = self.metadata_store.register_capture(
-            capture_id=job_id,
+        # 1. Register capture in persistent metadata catalog (REGISTERED)
+        self.metadata_store.register_capture(
+            capture_id=actual_capture_id,
             filename=filename,
             content_sha256=content_sha256,
             file_size_bytes=len(content),
             format_type=fmt_name,
             storage_path=str(upload_path),
+            lifecycle_status="REGISTERED",
+            engine_version="1.0.0",
+            pipeline_version="1.0.0",
+            schema_version="1.0.0",
         )
-        actual_capture_id = cap.get("capture_id", job_id)
 
-        # Register analysis job
+        # 2. Register analysis job (QUEUED / PROCESSING)
         self.metadata_store.save_analysis_job(
             job_id=job_id,
             capture_id=actual_capture_id,
@@ -137,29 +160,42 @@ class AnalysisService:
             file_size_bytes=len(content),
             status="processing",
             created_at=created_at.isoformat(),
+            engine_version="1.0.0",
+            pipeline_version="1.0.0",
+            schema_version="1.0.0",
+            events_path=str(canonical_events_path),
+            quarantine_path=str(quarantine_path),
+            report_path=str(report_path),
+        )
+
+        self.metadata_store.update_capture_lifecycle(
+            capture_id=actual_capture_id,
+            lifecycle_status="PROCESSING",
+            active_analysis_run_id=job_id,
         )
 
         job = AnalysisJob(
             job_id=job_id,
+            capture_id=actual_capture_id,
             filename=filename,
             file_size_bytes=len(content),
             status="processing",
             created_at=created_at,
         )
 
-        # Execute C++ engine binary safely via subprocess (no shell=True)
+        # 3. Execute C++ engine binary safely via subprocess (no shell=True)
         cmd = [
             str(binary_path),
             "--pcap",
             str(upload_path),
             "--out",
-            str(events_path),
+            str(raw_events_path),
             "--summary",
             str(summary_path),
             "--benchmark",
         ]
 
-        logger.info("Executing engine: %s", " ".join(cmd))
+        logger.info("Executing C++ engine: %s", " ".join(cmd))
         try:
             proc = subprocess.run(
                 cmd,
@@ -168,19 +204,101 @@ class AnalysisService:
                 timeout=120,
                 check=True,
             )
-            logger.info("Engine completed successfully: %s", proc.stdout[-200:] if proc.stdout else "")
+            logger.info("C++ engine completed successfully: %s", proc.stdout[-200:] if proc.stdout else "")
 
             # Load summary report
             if not summary_path.is_file():
-                raise RuntimeError("Engine completed but no summary file was produced.")
+                raise RuntimeError("C++ engine completed but no summary file was produced.")
 
             with open(summary_path, encoding="utf-8") as f:
                 summary_data = json.load(f)
 
             summary = AnalysisSummaryModel.model_validate(summary_data)
+
+            # 4. Execute Rust Evidence Pipeline for Normalization & Validation (NORMALIZING)
+            self.metadata_store.update_capture_lifecycle(
+                capture_id=actual_capture_id,
+                lifecycle_status="NORMALIZING",
+                active_analysis_run_id=job_id,
+            )
+
+            rust_binary = self.find_rust_pipeline_binary()
+            reconciliation = {
+                "input_count": summary.total_packets,
+                "accepted_count": summary.total_packets,
+                "rejected_count": 0,
+                "unsupported_count": 0,
+                "persisted_count": summary.total_packets,
+                "rust_pipeline_executed": False,
+                "pipeline_version": "1.0.0",
+                "schema_version": "1.0.0",
+                "status": "COMPLETED",
+            }
+
+            if rust_binary:
+                rust_cmd = [
+                    str(rust_binary),
+                    "--input",
+                    str(raw_events_path),
+                    "--out",
+                    str(canonical_events_path),
+                    "--quarantine",
+                    str(quarantine_path),
+                    "--report",
+                    str(report_path),
+                    "--capture-id",
+                    actual_capture_id,
+                    "--analysis-run-id",
+                    job_id,
+                    "--schema-version",
+                    "1.0.0",
+                ]
+                logger.info("Executing Rust Evidence Pipeline: %s", " ".join(rust_cmd))
+                rust_proc = subprocess.run(rust_cmd, capture_output=True, text=True, timeout=120)
+                if rust_proc.returncode != 0:
+                    logger.error("Rust Evidence Pipeline exited with error: %s", rust_proc.stderr)
+
+                if report_path.is_file():
+                    with open(report_path, encoding="utf-8") as rf:
+                        report_data = json.load(rf)
+                        reconciliation.update(report_data)
+                        reconciliation["rust_pipeline_executed"] = True
+            else:
+                logger.warning("Rust Evidence Pipeline binary not found; copying raw events to canonical path.")
+                import shutil
+
+                if raw_events_path.is_file():
+                    shutil.copyfile(raw_events_path, canonical_events_path)
+
+            # 5. Persist canonical events to DuckDB Parquet (PERSISTING)
+            self.metadata_store.update_capture_lifecycle(
+                capture_id=actual_capture_id,
+                lifecycle_status="PERSISTING",
+                active_analysis_run_id=job_id,
+            )
+
+            try:
+                self.analytics_store.convert_jsonl_to_parquet(job_id, canonical_events_path)
+            except Exception as e:
+                logger.warning("Failed to convert events to Parquet for job %s: %s", job_id, e)
+
+            # 6. Reconstruct network intelligence from flows and canonical events
+            self._correlate_intelligence(job_id, summary, canonical_events_path, created_at, actual_capture_id)
+
+            # 7. Generate a versioned topology snapshot for this capture
+            try:
+                self.snapshot_manager.create_snapshot(
+                    name=f"Capture Ingestion: {filename}",
+                    source_captures=[actual_capture_id],
+                    job_id=job_id,
+                    capture_filename=filename,
+                )
+            except Exception as e:
+                logger.warning("Failed to create snapshot after capture analysis: %s", e)
+
             completed_at = datetime.now(UTC)
 
-            # 1. Update job status in metadata store
+            # 8. Complete lifecycle and update metadata catalog
             self.metadata_store.save_analysis_job(
                 job_id=job_id,
                 capture_id=actual_capture_id,
@@ -190,29 +308,36 @@ class AnalysisService:
                 created_at=created_at.isoformat(),
                 completed_at=completed_at.isoformat(),
                 summary_dict=summary_data,
+                reconciliation_dict=reconciliation,
+                events_path=str(canonical_events_path),
+                quarantine_path=str(quarantine_path),
+                report_path=str(report_path),
+            )
+
+            self.metadata_store.update_capture_lifecycle(
+                capture_id=actual_capture_id,
+                lifecycle_status="COMPLETE",
+                active_analysis_run_id=job_id,
+                packet_count=summary.total_packets,
+                event_count=reconciliation.get("input_count", summary.total_packets),
+                accepted_count=reconciliation.get("accepted_count", summary.total_packets),
+                rejected_count=reconciliation.get("rejected_count", 0),
+                unsupported_count=reconciliation.get("unsupported_count", 0),
+                provenance_dict={
+                    "capture_id": actual_capture_id,
+                    "analysis_run_id": job_id,
+                    "engine_version": "1.0.0",
+                    "pipeline_version": "1.0.0",
+                    "schema_version": "1.0.0",
+                    "filename": filename,
+                    "content_sha256": content_sha256,
+                    "reconciliation": reconciliation,
+                },
             )
 
             job.status = "completed"
             job.completed_at = completed_at
             job.summary = summary
-
-            # 2. Ingest events into Parquet via DuckDB
-            try:
-                self.analytics_store.convert_jsonl_to_parquet(job_id, events_path)
-            except Exception as e:
-                logger.warning("Failed to convert events to Parquet for job %s: %s", job_id, e)
-
-            # 3. Reconstruct network intelligence from flows and events
-            self._correlate_intelligence(job_id, summary, events_path, created_at)
-
-            # 4. Generate a versioned topology snapshot
-            try:
-                self.snapshot_manager.create_snapshot(
-                    name=f"Capture Ingestion: {filename}",
-                    source_captures=[actual_capture_id],
-                )
-            except Exception as e:
-                logger.warning("Failed to create snapshot after capture analysis: %s", e)
 
             return job
 
@@ -257,9 +382,11 @@ class AnalysisService:
         summary: AnalysisSummaryModel,
         events_path: Path,
         timestamp: datetime,
+        capture_id: str | None = None,
     ):
         """Extracts assets, segments, services, and relationships from engine output."""
         all_evidence: list[EvidenceRecord] = []
+        artifact_id = capture_id or job_id
 
         # Process individual flows from summary
         for flow in summary.flows:
@@ -268,7 +395,7 @@ class AnalysisService:
                 ip_str=flow.src_ip,
                 mac_str=None,
                 observed_time=timestamp,
-                source_id=job_id,
+                source_id=artifact_id,
                 protocol=flow.ip_proto,
                 service=flow.app_protocol if flow.app_protocol != "UNKNOWN" else None,
             )
@@ -276,7 +403,7 @@ class AnalysisService:
                 ip_str=flow.dst_ip,
                 mac_str=None,
                 observed_time=timestamp,
-                source_id=job_id,
+                source_id=artifact_id,
                 protocol=flow.ip_proto,
                 service=flow.app_protocol if flow.app_protocol != "UNKNOWN" else None,
             )
@@ -287,11 +414,13 @@ class AnalysisService:
             self.metadata_store.upsert_asset(src_asset)
             self.metadata_store.upsert_asset(dst_asset)
 
-            # Inferred segments
-            src_seg = self.segment_inferrer.observe_ip(flow.src_ip, timestamp, job_id)
-            dst_seg = self.segment_inferrer.observe_ip(flow.dst_ip, timestamp, job_id)
-            self.metadata_store.upsert_segment(src_seg)
-            self.metadata_store.upsert_segment(dst_seg)
+            # Inferred segments (only for valid unicast host IPs, never multicast)
+            src_seg = self.segment_inferrer.observe_ip(flow.src_ip, timestamp, artifact_id)
+            dst_seg = self.segment_inferrer.observe_ip(flow.dst_ip, timestamp, artifact_id)
+            if src_seg:
+                self.metadata_store.upsert_segment(src_seg)
+            if dst_seg:
+                self.metadata_store.upsert_segment(dst_seg)
 
             # Upsert services if server port detected
             if flow.dst_port:
@@ -395,6 +524,55 @@ class AnalysisService:
                                     asset.hostnames.append(sni)
                                     self.metadata_store.upsert_asset(asset)
 
+                        # Direct Layer-2 Ethernet frame correlation (e.g. EtherType 0x88F7 / 35063 direct PTP)
+                        link_layer = ev.get("link_layer")
+                        net_layer = ev.get("network_layer")
+                        app_layer = ev.get("application_layer")
+                        if link_layer and not net_layer:
+                            src_mac = link_layer.get("source_mac")
+                            dst_mac = link_layer.get("destination_mac")
+                            ether_type = link_layer.get("ether_type")
+                            app_proto = app_layer.get("protocol", "Ethernet") if app_layer else "Ethernet"
+
+                            if src_mac and dst_mac:
+                                src_l2, src_l2_evs = self.identity_resolver.resolve_l2_asset(
+                                    mac_str=src_mac,
+                                    observed_time=timestamp,
+                                    source_id=job_id,
+                                    protocol=app_proto,
+                                    ether_type=ether_type,
+                                )
+                                dst_l2, dst_l2_evs = self.identity_resolver.resolve_l2_asset(
+                                    mac_str=dst_mac,
+                                    observed_time=timestamp,
+                                    source_id=job_id,
+                                    protocol=app_proto,
+                                    ether_type=ether_type,
+                                )
+                                all_evidence.extend(src_l2_evs)
+                                all_evidence.extend(dst_l2_evs)
+                                self.metadata_store.upsert_asset(src_l2)
+                                self.metadata_store.upsert_asset(dst_l2)
+
+                                l2_rel_id = f"rel-l2-{src_l2.asset_id}-{dst_l2.asset_id}-{ether_type or 0}"
+                                l2_flow_id = ev.get("flow_id") or f"l2-{src_mac}-{dst_mac}"
+                                l2_rel = CommunicationRelationship(
+                                    relationship_id=l2_rel_id,
+                                    src_asset_id=src_l2.asset_id,
+                                    dst_asset_id=dst_l2.asset_id,
+                                    transport_protocol="Ethernet",
+                                    app_protocol=app_proto,
+                                    packet_count=1,
+                                    byte_count=app_layer.get("payload_length_bytes", 64) if app_layer else 64,
+                                    first_seen=timestamp,
+                                    last_seen=timestamp,
+                                    flow_ids=[str(l2_flow_id)],
+                                    evidence_type=EvidenceType.PACKET_OBSERVED,
+                                    directionality="unidirectional",
+                                    confidence=0.98,
+                                )
+                                self.metadata_store.upsert_relationship(l2_rel)
+
                     except json.JSONDecodeError:
                         continue
 
@@ -407,6 +585,7 @@ class AnalysisService:
             return None
         return AnalysisJob(
             job_id=row["job_id"],
+            capture_id=row.get("capture_id"),
             filename=row["filename"],
             file_size_bytes=row["file_size_bytes"],
             status=row["status"],
@@ -421,6 +600,7 @@ class AnalysisService:
         return [
             AnalysisJob(
                 job_id=row["job_id"],
+                capture_id=row.get("capture_id"),
                 filename=row["filename"],
                 file_size_bytes=row["file_size_bytes"],
                 status=row["status"],

@@ -216,4 +216,151 @@ describe('BenchmarkWorkbench Component', () => {
       expect(screen.getByText(/Deterministic Firewall ACL drops ALWAYS supersede statistical forecasts/)).toBeInTheDocument();
     });
   });
+
+  it('displays N/A for missing measurements rather than displaying zero or false estimates', async () => {
+    vi.mocked(apiClient.getBenchmarkSummary).mockResolvedValue({
+      total_runs: 0,
+      verified_fixtures: 0,
+      average_throughput_pps: null as unknown as number,
+      average_pipeline_latency_ms: null as unknown as number,
+      deterministic_accuracy_pct: null as unknown as number,
+      models_beating_baseline_pct: null as unknown as number,
+      peak_memory_mb: null as unknown as number,
+      recent_runs: [],
+    });
+
+    render(<BenchmarkWorkbench />);
+
+    await waitFor(() => {
+      const naElements = screen.getAllByText('N/A');
+      expect(naElements.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('labels newly executed live runs with live status and distinguishes historical runs', async () => {
+    const liveRun: BenchmarkRunRecord = {
+      ...mockRuns[0]!,
+      run_id: 'run-live-999',
+    };
+    vi.mocked(apiClient.runBenchmark).mockResolvedValue([liveRun]);
+
+    render(<BenchmarkWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Run Validation Suite').closest('button')).not.toBeDisabled();
+    });
+
+    const runBtn = screen.getByText('Run Validation Suite');
+    fireEvent.click(runBtn);
+
+    await waitFor(() => {
+      expect(apiClient.runBenchmark).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('Audit Runs History'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/\[LATEST LIVE RUN\]/)).toBeInTheDocument();
+    });
+  });
+
+  it('renders fixtures with backend byte_size and undefined byte_count without toLocaleString crash', async () => {
+    const rawBackendFixtures = [
+      {
+        fixture_id: 'raw-backend-fixture-01',
+        name: 'Backend Fixture With Byte Size',
+        category: 'CORE',
+        provenance: 'REAL_CAPTURE',
+        description: 'Fixture using byte_size from FastAPI backend',
+        packet_count: 42,
+        byte_size: 4096, // notice byte_count is undefined
+        content_sha256: 'fedcba9876543210',
+        expected_properties: {
+          forwarding_status: 'DELIVERED',
+          invariant_status: 'HOLD',
+          should_drop: false,
+          error_expected: false,
+        },
+      },
+    ];
+
+    vi.mocked(apiClient.listBenchmarkFixtures).mockResolvedValue(rawBackendFixtures as unknown as BenchmarkFixtureMeta[]);
+
+    render(<BenchmarkWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('raw-backend-fixture-01')).toBeInTheDocument();
+      expect(screen.getByText('42 pkts')).toBeInTheDocument();
+      expect(screen.getByText('4,096 bytes')).toBeInTheDocument();
+      expect(screen.getByText('DELIVERED')).toBeInTheDocument();
+    });
+  });
+
+  it('renders nullable predictive metrics and operational profile without toFixed or peak_memory_mb crash', async () => {
+    const runWithNulls: BenchmarkRunRecord = {
+      run_id: 'run-null-metrics-01',
+      fixture_id: 'handshake-core',
+      timestamp_iso: '2026-10-20T12:00:00Z',
+      provenance: 'REAL_CAPTURE',
+      category: 'CORE',
+      decoding: {
+        packets_decoded: 10,
+        bytes_processed: 500,
+        duration_ms: 2.5,
+        throughput_pkts_per_sec: 4000,
+      },
+      deterministic: {
+        forwarding_status: 'DELIVERED',
+        invariant_status: 'HOLD',
+        duration_ms: 1.0,
+      },
+      predictive: {
+        target: 'flow_volume',
+        sample_count: 5,
+        train_count: 3,
+        test_count: 2,
+        baseline_algorithm: 'PERSISTENCE',
+        baseline_mae: null,
+        baseline_rmse: null,
+        learned_algorithm: 'RIDGE',
+        learned_mae: null,
+        learned_rmse: null,
+        relative_improvement_pct: null,
+        comparison_status: 'INSUFFICIENT_DATA',
+        conformal_interval_mean_width: null, // nullable metric that previously crashed with toFixed
+        ood_in_dist_score: null,             // nullable metric that previously crashed with toFixed
+        ood_shifted_score: null,            // nullable metric that previously crashed with toFixed
+        duration_ms: 0.5,
+      },
+      consensus: {
+        consensus_status: 'COMPLEMENTARY',
+        ground_truth_held: true,
+        explanation: 'Ground truth upheld by deterministic engine.',
+      },
+      // Note: profile is undefined, only operational is provided by backend
+      operational: {
+        total_runtime_ms: 15.4,
+        peak_memory_mb: 24.6,
+        storage_bytes_delta: 500,
+      },
+      status: 'COMPLETED',
+    } as unknown as BenchmarkRunRecord;
+
+    vi.mocked(apiClient.listBenchmarkRuns).mockResolvedValue([runWithNulls]);
+
+    render(<BenchmarkWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Audit Runs History')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Audit Runs History'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('handshake-core')[0]).toBeInTheDocument();
+      expect(screen.getByText(/run-null-metrics-01/i)).toBeInTheDocument();
+      expect(screen.getByText('Stage 4: Ground-Truth Supremacy Consensus')).toBeInTheDocument();
+      expect(screen.getByText('24.60 MB')).toBeInTheDocument();
+    });
+  });
 });

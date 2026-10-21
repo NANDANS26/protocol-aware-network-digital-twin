@@ -37,6 +37,7 @@ export interface AnalysisSummary {
   http_responses: number;
   tls_handshakes: number;
   quic_datagrams: number;
+  ptp_messages?: number;
   protocol_counts: Record<string, number>;
   parser_status_counts: Record<string, number>;
   tcp_state_counts: Record<string, number>;
@@ -46,6 +47,7 @@ export interface AnalysisSummary {
 
 export interface AnalysisJob {
   job_id: string;
+  capture_id?: string | null;
   filename: string;
   file_size_bytes: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -57,6 +59,7 @@ export interface AnalysisJob {
 
 export interface JobUploadResponse {
   job_id: string;
+  capture_id?: string | null;
   filename: string;
   file_size_bytes: number;
   status: string;

@@ -77,3 +77,18 @@ async def test_intelligence_api_flow(test_app_client):
         assert res.status_code == 200
         snap_graph = res.json()
         assert snap_graph["graph_id"] == snap_id
+
+        # 6. Delete configuration import
+        import_id = imp_data["import_id"]
+        res = await client.delete(f"/api/v1/imports/{import_id}")
+        assert res.status_code == 200
+        assert res.json()["status"] == "DELETED"
+
+        # Verify import is removed
+        res = await client.get("/api/v1/imports")
+        assert res.status_code == 200
+        assert not any(i["import_id"] == import_id for i in res.json())
+
+        # Deleting non-existent import returns 404
+        res = await client.delete("/api/v1/imports/non-existent-import-id")
+        assert res.status_code == 404

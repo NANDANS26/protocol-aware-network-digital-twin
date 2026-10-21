@@ -9,8 +9,9 @@ and state preservation under benign timestamp shifts.
 from __future__ import annotations
 
 import time
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from network_twin.testing.sequence_generators import apply_sequence_mutations
 from network_twin.testing.sequence_models import (
@@ -24,7 +25,7 @@ from network_twin.testing.sequence_runner import SequenceRunner
 class SequenceDifferentialResult(BaseModel):
     """Result of sequence-level differential or metamorphic verification."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     test_name: str = Field(..., description="Name of differential or metamorphic test")
     equivalent: bool = Field(..., description="Whether both representations yielded equivalent semantic facts")
@@ -35,6 +36,30 @@ class SequenceDifferentialResult(BaseModel):
     duration_ms: float = Field(..., description="Execution duration in milliseconds")
     differences: list[str] = Field(default_factory=list, description="List of observed semantic discrepancies")
     diagnostic: str | None = Field(default=None, description="Detailed diagnostic or error report")
+    baseline_name: str | None = Field(default=None, description="Name of baseline representation")
+    candidate_name: str | None = Field(default=None, description="Name of candidate representation")
+    baseline_event_count: int | None = Field(default=None, description="Compatibility alias for baseline_events_count")
+    candidate_event_count: int | None = Field(
+        default=None, description="Compatibility alias for candidate_events_count"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_differential_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            b_cnt = data.get("baseline_events_count") or data.get("baseline_event_count") or 0
+            c_cnt = data.get("candidate_events_count") or data.get("candidate_event_count") or 0
+            data["baseline_events_count"] = b_cnt
+            data["baseline_event_count"] = b_cnt
+            data["candidate_events_count"] = c_cnt
+            data["candidate_event_count"] = c_cnt
+            if not data.get("baseline_name"):
+                mode = data.get("mode", "")
+                data["baseline_name"] = "PCAP Format" if mode == "pcap_vs_pcapng" else "Unmodified Baseline"
+            if not data.get("candidate_name"):
+                mode = data.get("mode", "")
+                data["candidate_name"] = "PCAPNG Format" if mode == "pcap_vs_pcapng" else f"Mutated ({mode})"
+        return data
 
 
 def run_sequence_pcap_vs_pcapng_differential(

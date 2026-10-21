@@ -238,4 +238,35 @@ describe('RealCaptureWorkbench Component', () => {
       expect(screen.getByText('9 events ingested')).toBeDefined();
     });
   });
+
+  it('renders structured protocol stack inspection by layers (L2, L3, L4, L7)', async () => {
+    render(<RealCaptureWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Layered Protocol Stack Inspection & Expected Invariants')).toBeDefined();
+      expect(screen.getByText(/Layer 2: Link Layer/)).toBeDefined();
+      expect(screen.getByText(/Layer 3: Network Layer/)).toBeDefined();
+      expect(screen.getByText(/Layer 4: Transport Layer/)).toBeDefined();
+      expect(screen.getByText(/Layer 7: Application Layer/)).toBeDefined();
+      expect(screen.getByText(/Ethernet II/)).toBeDefined();
+      expect(screen.getByText(/No Fragmentation \(Clean MTU\)/)).toBeDefined();
+      expect(screen.getByText('Differential Verification Status: Unvalidated')).toBeDefined();
+    });
+  });
+
+  it('filters capture corpus manifest based on search query', async () => {
+    render(<RealCaptureWorkbench />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Search captures/)).toBeDefined();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/Search captures/);
+    fireEvent.change(searchInput, { target: { value: 'VLAN' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('manifest-item-vlan-segmented-pcap')).toBeDefined();
+      expect(screen.queryByTestId('manifest-item-real-web-traffic-pcap')).toBeNull();
+    });
+  });
 });

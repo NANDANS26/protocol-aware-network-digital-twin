@@ -95,7 +95,17 @@ class IdentityResolver:
         services = [service] if service else []
 
         # Determine status
-        if ip_obj.is_multicast or ip_obj.is_unspecified:
+        if ip_obj.is_multicast:
+            status = IdentityStatus.CONFIRMED if macs else IdentityStatus.PROBABLE
+            confidence = 0.85
+            if not hostnames:
+                if clean_ip == "224.0.1.129":
+                    hostnames = ["PTP Primary Multicast Group (224.0.1.129)"]
+                elif clean_ip == "224.0.0.107":
+                    hostnames = ["PTP Peer Delay Multicast Group (224.0.0.107)"]
+                else:
+                    hostnames = [f"Multicast Group ({clean_ip})"]
+        elif ip_obj.is_unspecified:
             status = IdentityStatus.UNRESOLVED
             confidence = 0.3
         elif macs:
@@ -139,10 +149,89 @@ class IdentityResolver:
             parser_status="ok",
             confidence=confidence,
             provenance=f"Observed on wire from source {source_id}",
-            details={"ip": clean_ip, "mac": macs, "status": status.value},
+            details={"ip": clean_ip, "mac": macs, "status": status.value, "is_multicast": ip_obj.is_multicast},
         )
         evidence_list.append(evidence)
 
+        return asset, evidence_list
+
+    def resolve_l2_asset(
+        self,
+        mac_str: str,
+        observed_time: datetime,
+        source_id: str,
+        protocol: str = "Ethernet",
+        ether_type: int | None = None,
+        label: str | None = None,
+    ) -> tuple[Asset, list[EvidenceRecord]]:
+        """Resolves or updates a pure Layer-2 MAC asset without inventing synthetic IP endpoints."""
+        clean_mac = mac_str.lower().strip()
+        key = f"mac:{clean_mac}"
+        evidence_list: list[EvidenceRecord] = []
+
+        existing = self._ip_to_asset.get(key)
+        if existing:
+            if observed_time < existing.first_seen:
+                existing.first_seen = observed_time
+            if observed_time > existing.last_seen:
+                existing.last_seen = observed_time
+            if protocol and protocol not in existing.observed_protocols:
+                existing.observed_protocols.append(protocol)
+            if source_id not in existing.observation_sources:
+                existing.observation_sources.append(source_id)
+            if label and label not in existing.hostnames:
+                existing.hostnames.append(label)
+            return existing, evidence_list
+
+        # Determine if MAC is multicast
+        is_l2_multicast = clean_mac.startswith("01:") or clean_mac.startswith("33:33:")
+        hostnames: list[str] = []
+        if label:
+            hostnames.append(label)
+        elif clean_mac in ("01:80:c2:00:00:0e", "01:80:c2:00:00:00"):
+            hostnames.append("PTP Peer Delay L2 Multicast (01:80:C2:00:00:0E)")
+        elif clean_mac == "01:1b:19:00:00:00":
+            hostnames.append("PTP Primary L2 Multicast (01:1B:19:00:00:00)")
+        elif is_l2_multicast:
+            hostnames.append(f"L2 Multicast Group ({clean_mac})")
+        else:
+            hostnames.append(f"L2 Device ({clean_mac})")
+
+        asset_id = f"asset-mac-{hashlib.sha256(clean_mac.encode()).hexdigest()[:16]}"
+        asset = Asset(
+            asset_id=asset_id,
+            primary_ip="",
+            ip_addresses=[],
+            mac_addresses=[clean_mac],
+            hostnames=hostnames,
+            observed_protocols=[protocol],
+            observed_services=[],
+            first_seen=observed_time,
+            last_seen=observed_time,
+            identity_status=IdentityStatus.CONFIRMED,
+            confidence=0.95,
+            conflicts=[],
+            observation_sources=[source_id],
+        )
+
+        self._ip_to_asset[key] = asset
+
+        ev_id = f"ev-l2-asset-{asset_id}"
+        evidence = EvidenceRecord(
+            evidence_id=ev_id,
+            evidence_type=EvidenceType.PACKET_OBSERVED,
+            source_type="l2_frame_analysis",
+            source_artifact_id=source_id,
+            observation_timestamp=observed_time,
+            ingestion_timestamp=datetime.now(datetime.UTC if hasattr(datetime, "UTC") else None),
+            src_ref=clean_mac,
+            dst_ref=None,
+            parser_status="ok",
+            confidence=0.95,
+            provenance=f"Layer-2 frame observation (EtherType {hex(ether_type) if isinstance(ether_type, int) else (ether_type or 'N/A')}) from source {source_id}",
+            details={"mac": clean_mac, "ether_type": ether_type, "is_l2_multicast": is_l2_multicast},
+        )
+        evidence_list.append(evidence)
         return asset, evidence_list
 
     def correlate_arp_mapping(

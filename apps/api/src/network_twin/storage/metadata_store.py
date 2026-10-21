@@ -4,7 +4,6 @@ import json
 import logging
 import sqlite3
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from network_twin.benchmarking.models import (
@@ -56,27 +55,81 @@ from network_twin.testing.sequence_models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class MetadataStore:
-    """Persistent relational catalog with ACID transactions and schema versioning."""
+    """Persistent relational catalog with ACID transactions and schema versioning.
 
-    def __init__(self, config: AppSettings = settings):
+    Supports both PostgreSQL (production/container) and SQLite (local dev/tests).
+    """
+
+    def __init__(self, config: AppSettings = settings, engine: Any = None):
         self.config = config
-        self.db_path = Path(self.config.data_dir) / "metadata.db"
+        from network_twin.storage.db_engine import DatabaseEngine, db_engine
+
+        self.engine = engine or (db_engine if config == settings else DatabaseEngine(config))
+        self.db_path = self.engine.db_path
         self._ensure_initialized()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        return conn
+    def _get_connection(self):
+        return self.engine.get_connection()
 
     def _ensure_initialized(self):
         """Initializes tables and executes migrations if needed."""
+        if getattr(self.engine, "db_type", "sqlite") == "postgresql":
+            self._ensure_initialized_postgres()
+        else:
+            self._ensure_initialized_sqlite()
+
+    def _ensure_initialized_postgres(self):
+        """Initializes PostgreSQL schema up to version 9."""
+        from network_twin.storage.postgres_schema import POSTGRES_SCHEMA_V9_DDL
+
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    description TEXT NOT NULL
+                );
+                """
+            )
+            cur = conn.execute("SELECT MAX(version) FROM schema_migrations;")
+            row = cur.fetchone()
+            current_version = row[0] if row and row[0] is not None else 0
+
+            if current_version < 9:
+                logger.info("Applying PostgreSQL schema definitions (v1-v9)...")
+                conn.execute(POSTGRES_SCHEMA_V9_DDL)
+                migrations = [
+                    (1, "Initial schema for captures, assets, evidence, and topology"),
+                    (2, "Phase 03: Executable Network Models, Scenarios, Invariants, and Results"),
+                    (3, "Phase 04: Protocol Security Testing, Campaigns, Cases, Findings, and Regressions"),
+                    (4, "Phase 05: Stateful Protocol Sequences, Findings, and Regressions"),
+                    (5, "Phase 06: Predictive Network World Model, Datasets, Model Artifacts, and Predictions"),
+                    (6, "Phase 07: Real-World Validation and Reproducible Benchmark Catalog"),
+                    (7, "Phase 10: Evidence-Backed Network Incident Investigation and Root-Cause Analysis"),
+                    (8, "Phase 11: Reproducible Investigation Replay, Execution Records, and Integrity Ledger"),
+                    (
+                        9,
+                        "Capture-Centric Architecture: Persistent Capture Lifecycle, Provenance, and Rust Evidence Reconciliation",
+                    ),
+                ]
+                for ver, desc in migrations:
+                    conn.execute(
+                        """
+                        INSERT INTO schema_migrations (version, applied_at, description)
+                        VALUES (?, CURRENT_TIMESTAMP, ?)
+                        ON CONFLICT (version) DO NOTHING;
+                        """,
+                        (ver, desc),
+                    )
+                conn.commit()
+
+    def _ensure_initialized_sqlite(self):
+        """Initializes SQLite tables and executes migrations if needed."""
         with self._get_connection() as conn:
             conn.execute(
                 """
@@ -107,6 +160,8 @@ class MetadataStore:
                 self._migrate_to_v7(conn)
             if current_version < 8:
                 self._migrate_to_v8(conn)
+            if current_version < 9:
+                self._migrate_to_v9(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection):
         """Initial Schema v1 creation."""
@@ -675,6 +730,79 @@ class MetadataStore:
         )
         conn.commit()
 
+    def _migrate_to_v9(self, conn: sqlite3.Connection):
+        """Schema v9: Capture-Centric Lifecycle, Provenance, and Rust Evidence Reconciliation."""
+        logger.info("Applying Metadata Store Schema Migration v9...")
+        conn.execute("PRAGMA foreign_keys=OFF;")
+
+        # 1. Recreate captures table with all new columns and without content_sha256 UNIQUE
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS captures_v9 (
+                capture_id TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                content_sha256 TEXT NOT NULL,
+                file_size_bytes INTEGER NOT NULL,
+                format TEXT NOT NULL,
+                storage_path TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL,
+                lifecycle_status TEXT NOT NULL DEFAULT 'COMPLETE',
+                error_message TEXT,
+                active_analysis_run_id TEXT,
+                engine_version TEXT DEFAULT '1.0.0',
+                pipeline_version TEXT DEFAULT '1.0.0',
+                schema_version TEXT DEFAULT '1.0.0',
+                packet_count INTEGER DEFAULT 0,
+                event_count INTEGER DEFAULT 0,
+                accepted_count INTEGER DEFAULT 0,
+                rejected_count INTEGER DEFAULT 0,
+                unsupported_count INTEGER DEFAULT 0,
+                provenance_json TEXT
+            );
+            """
+        )
+
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO captures_v9 (
+                capture_id, filename, content_sha256, file_size_bytes, format, storage_path, uploaded_at
+            )
+            SELECT capture_id, filename, content_sha256, file_size_bytes, format, storage_path, uploaded_at
+            FROM captures;
+            """
+        )
+        conn.execute("DROP TABLE captures;")
+        conn.execute("ALTER TABLE captures_v9 RENAME TO captures;")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_captures_content_sha256 ON captures(content_sha256);")
+
+        # 2. Add columns to analysis_jobs
+        cur = conn.execute("PRAGMA table_info(analysis_jobs);")
+        existing_job_cols = {row["name"] for row in cur.fetchall()}
+
+        job_cols = [
+            ("engine_version", "TEXT DEFAULT '1.0.0'"),
+            ("pipeline_version", "TEXT DEFAULT '1.0.0'"),
+            ("schema_version", "TEXT DEFAULT '1.0.0'"),
+            ("reconciliation_json", "TEXT"),
+            ("events_path", "TEXT"),
+            ("quarantine_path", "TEXT"),
+            ("report_path", "TEXT"),
+        ]
+        for col_name, col_type in job_cols:
+            if col_name not in existing_job_cols:
+                conn.execute(f"ALTER TABLE analysis_jobs ADD COLUMN {col_name} {col_type};")
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_analysis_jobs_capture_id ON analysis_jobs(capture_id);")
+
+        conn.execute(
+            """
+            INSERT INTO schema_migrations (version, applied_at, description)
+            VALUES (9, datetime('now'), 'Capture-Centric Architecture: Persistent Capture Lifecycle, Provenance, and Rust Evidence Reconciliation');
+            """
+        )
+        conn.execute("PRAGMA foreign_keys=ON;")
+        conn.commit()
+
     # --- Captures & Jobs ---
 
     def register_capture(
@@ -685,34 +813,147 @@ class MetadataStore:
         file_size_bytes: int,
         format_type: str,
         storage_path: str,
+        lifecycle_status: str = "REGISTERED",
+        engine_version: str = "1.0.0",
+        pipeline_version: str = "1.0.0",
+        schema_version: str = "1.0.0",
     ) -> dict[str, Any]:
         with self._get_connection() as conn:
-            existing = self.get_capture_by_hash(content_sha256)
-            if existing:
-                actual_capture_id = existing["capture_id"]
-                conn.execute(
-                    "UPDATE captures SET filename = ?, storage_path = ? WHERE capture_id = ?;",
-                    (filename, storage_path, actual_capture_id),
-                )
-                conn.commit()
-                return self.get_capture(actual_capture_id) or {}
-
             now_iso = datetime.now(UTC).isoformat()
             conn.execute(
                 """
-                INSERT INTO captures (capture_id, filename, content_sha256, file_size_bytes, format, storage_path, uploaded_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO captures (
+                    capture_id, filename, content_sha256, file_size_bytes, format, storage_path, uploaded_at,
+                    lifecycle_status, engine_version, pipeline_version, schema_version
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(capture_id) DO UPDATE SET
+                    filename=excluded.filename,
+                    storage_path=excluded.storage_path,
+                    lifecycle_status=excluded.lifecycle_status;
                 """,
-                (capture_id, filename, content_sha256, file_size_bytes, format_type, storage_path, now_iso),
+                (
+                    capture_id,
+                    filename,
+                    content_sha256,
+                    file_size_bytes,
+                    format_type,
+                    storage_path,
+                    now_iso,
+                    lifecycle_status,
+                    engine_version,
+                    pipeline_version,
+                    schema_version,
+                ),
             )
             conn.commit()
             return self.get_capture(capture_id) or {}
+
+    def update_capture_lifecycle(
+        self,
+        capture_id: str,
+        lifecycle_status: str,
+        active_analysis_run_id: str | None = None,
+        error_message: str | None = None,
+        packet_count: int | None = None,
+        event_count: int | None = None,
+        accepted_count: int | None = None,
+        rejected_count: int | None = None,
+        unsupported_count: int | None = None,
+        provenance_dict: dict[str, Any] | None = None,
+    ):
+        with self._get_connection() as conn:
+            updates = ["lifecycle_status = ?"]
+            params: list[Any] = [lifecycle_status]
+            if active_analysis_run_id is not None:
+                updates.append("active_analysis_run_id = ?")
+                params.append(active_analysis_run_id)
+            if error_message is not None:
+                updates.append("error_message = ?")
+                params.append(error_message)
+            if packet_count is not None:
+                updates.append("packet_count = ?")
+                params.append(packet_count)
+            if event_count is not None:
+                updates.append("event_count = ?")
+                params.append(event_count)
+            if accepted_count is not None:
+                updates.append("accepted_count = ?")
+                params.append(accepted_count)
+            if rejected_count is not None:
+                updates.append("rejected_count = ?")
+                params.append(rejected_count)
+            if unsupported_count is not None:
+                updates.append("unsupported_count = ?")
+                params.append(unsupported_count)
+            if provenance_dict is not None:
+                updates.append("provenance_json = ?")
+                params.append(json.dumps(provenance_dict))
+            params.append(capture_id)
+            conn.execute(f"UPDATE captures SET {', '.join(updates)} WHERE capture_id = ?;", params)
+            conn.commit()
+
+    def get_analysis_runs_for_capture(self, capture_id: str) -> list[dict[str, Any]]:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT * FROM analysis_jobs WHERE capture_id = ? ORDER BY created_at DESC;",
+                (capture_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def get_active_analysis_run(self, capture_id: str) -> dict[str, Any] | None:
+        runs = self.get_analysis_runs_for_capture(capture_id)
+        if not runs:
+            return None
+        for r in runs:
+            if r.get("status") == "completed":
+                return r
+        return runs[0]
 
     def get_capture(self, capture_id: str) -> dict[str, Any] | None:
         with self._get_connection() as conn:
             cur = conn.execute("SELECT * FROM captures WHERE capture_id = ?;", (capture_id,))
             row = cur.fetchone()
-            return dict(row) if row else None
+            if row:
+                return dict(row)
+            # Fallback: check if the identifier was an analysis job ID
+            job_cur = conn.execute("SELECT capture_id FROM analysis_jobs WHERE job_id = ?;", (capture_id,))
+            job_row = job_cur.fetchone()
+            if job_row and job_row["capture_id"]:
+                cur2 = conn.execute("SELECT * FROM captures WHERE capture_id = ?;", (job_row["capture_id"],))
+                row2 = cur2.fetchone()
+                return dict(row2) if row2 else None
+            return None
+
+    def resolve_capture_and_job(self, identifier: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Resolves either a capture ID or analysis job ID into (capture_record, analysis_job_record)."""
+        with self._get_connection() as conn:
+            # 1. Try identifier as capture_id
+            cur = conn.execute("SELECT * FROM captures WHERE capture_id = ?;", (identifier,))
+            cap_row = cur.fetchone()
+            if cap_row:
+                cap = dict(cap_row)
+                # Find latest job for this capture
+                job_cur = conn.execute(
+                    "SELECT * FROM analysis_jobs WHERE capture_id = ? ORDER BY created_at DESC LIMIT 1;",
+                    (identifier,),
+                )
+                j_row = job_cur.fetchone()
+                return cap, dict(j_row) if j_row else None
+
+            # 2. Try identifier as job_id
+            job_cur = conn.execute("SELECT * FROM analysis_jobs WHERE job_id = ?;", (identifier,))
+            j_row = job_cur.fetchone()
+            if j_row:
+                job = dict(j_row)
+                cap_id = job.get("capture_id")
+                if cap_id:
+                    cur = conn.execute("SELECT * FROM captures WHERE capture_id = ?;", (cap_id,))
+                    c_row = cur.fetchone()
+                    return (dict(c_row) if c_row else None), job
+                return None, job
+
+            return None, None
 
     def get_capture_by_hash(self, content_sha256: str) -> dict[str, Any] | None:
         with self._get_connection() as conn:
@@ -736,6 +977,13 @@ class MetadataStore:
         completed_at: str | None = None,
         error_message: str | None = None,
         summary_dict: dict[str, Any] | None = None,
+        engine_version: str | None = "1.0.0",
+        pipeline_version: str | None = "1.0.0",
+        schema_version: str | None = "1.0.0",
+        reconciliation_dict: dict[str, Any] | None = None,
+        events_path: str | None = None,
+        quarantine_path: str | None = None,
+        report_path: str | None = None,
     ):
         with self._get_connection() as conn:
             # Verify foreign key existence for capture_id if provided
@@ -745,15 +993,26 @@ class MetadataStore:
                     capture_id = None
 
             summary_json = json.dumps(summary_dict) if summary_dict else None
+            reconciliation_json = json.dumps(reconciliation_dict) if reconciliation_dict else None
             conn.execute(
                 """
-                INSERT INTO analysis_jobs (job_id, capture_id, filename, file_size_bytes, status, created_at, completed_at, error_message, summary_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO analysis_jobs (
+                    job_id, capture_id, filename, file_size_bytes, status, created_at, completed_at, error_message, summary_json,
+                    engine_version, pipeline_version, schema_version, reconciliation_json, events_path, quarantine_path, report_path
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(job_id) DO UPDATE SET
                     status=excluded.status,
                     completed_at=excluded.completed_at,
                     error_message=excluded.error_message,
-                    summary_json=excluded.summary_json;
+                    summary_json=excluded.summary_json,
+                    engine_version=excluded.engine_version,
+                    pipeline_version=excluded.pipeline_version,
+                    schema_version=excluded.schema_version,
+                    reconciliation_json=excluded.reconciliation_json,
+                    events_path=excluded.events_path,
+                    quarantine_path=excluded.quarantine_path,
+                    report_path=excluded.report_path;
                 """,
                 (
                     job_id,
@@ -765,6 +1024,13 @@ class MetadataStore:
                     completed_at,
                     error_message,
                     summary_json,
+                    engine_version,
+                    pipeline_version,
+                    schema_version,
+                    reconciliation_json,
+                    events_path,
+                    quarantine_path,
+                    report_path,
                 ),
             )
             conn.commit()
@@ -846,16 +1112,36 @@ class MetadataStore:
         evidence_type: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        snapshot_id: str | None = None,
     ) -> list[EvidenceRecord]:
-        query = "SELECT * FROM evidence_records WHERE 1=1"
+        query = "SELECT DISTINCT e.* FROM evidence_records e"
         params: list[Any] = []
+
+        if snapshot_id:
+            snap = self.get_snapshot(snapshot_id)
+            if snap:
+                sources = list(snap.source_captures)
+                job_id = snap.metadata.get("analysis_job_id") if snap.metadata else None
+                if job_id and job_id not in sources:
+                    sources.append(job_id)
+                if sources:
+                    placeholders = ",".join("?" for _ in sources)
+                    query += f" WHERE e.source_artifact_id IN ({placeholders})"
+                    params.extend(sources)
+                else:
+                    query += " WHERE 1=1"
+            else:
+                query += " WHERE 1=1"
+        else:
+            query += " WHERE 1=1"
+
         if source_artifact_id:
-            query += " AND source_artifact_id = ?"
+            query += " AND e.source_artifact_id = ?"
             params.append(source_artifact_id)
         if evidence_type:
-            query += " AND evidence_type = ?"
+            query += " AND e.evidence_type = ?"
             params.append(evidence_type)
-        query += " ORDER BY ingestion_timestamp DESC LIMIT ? OFFSET ?;"
+        query += " ORDER BY e.ingestion_timestamp DESC LIMIT ? OFFSET ?;"
         params.extend([limit, offset])
 
         with self._get_connection() as conn:
@@ -935,17 +1221,28 @@ class MetadataStore:
         identity_status: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        source_id: str | None = None,
+        snapshot_id: str | None = None,
     ) -> list[Asset]:
-        query = "SELECT * FROM assets WHERE 1=1"
+        query = "SELECT DISTINCT a.* FROM assets a"
         params: list[Any] = []
+        if snapshot_id:
+            query += " JOIN snapshot_nodes sn ON a.asset_id = sn.asset_id WHERE sn.snapshot_id = ?"
+            params.append(snapshot_id)
+        else:
+            query += " WHERE 1=1"
+
+        if source_id:
+            query += " AND a.observation_sources_json LIKE ?"
+            params.append(f'%"{source_id}"%')
         if ip_query:
-            query += " AND (primary_ip LIKE ? OR ip_addresses_json LIKE ? OR hostnames_json LIKE ?)"
+            query += " AND (a.primary_ip LIKE ? OR a.ip_addresses_json LIKE ? OR a.hostnames_json LIKE ?)"
             pat = f"%{ip_query}%"
             params.extend([pat, pat, pat])
         if identity_status:
-            query += " AND identity_status = ?"
+            query += " AND a.identity_status = ?"
             params.append(identity_status)
-        query += " ORDER BY last_seen DESC LIMIT ? OFFSET ?;"
+        query += " ORDER BY a.last_seen DESC LIMIT ? OFFSET ?;"
         params.extend([limit, offset])
 
         with self._get_connection() as conn:
@@ -1008,9 +1305,27 @@ class MetadataStore:
             )
             conn.commit()
 
-    def list_segments(self) -> list[NetworkSegment]:
+    def list_segments(
+        self,
+        source_id: str | None = None,
+        snapshot_id: str | None = None,
+    ) -> list[NetworkSegment]:
+        query = "SELECT DISTINCT s.* FROM network_segments s"
+        params: list[Any] = []
+        if snapshot_id:
+            query += " JOIN snapshot_nodes sn ON s.segment_id = sn.segment_id WHERE sn.snapshot_id = ?"
+            params.append(snapshot_id)
+        else:
+            query += " WHERE 1=1"
+
+        if source_id:
+            query += " AND s.provenance LIKE ?"
+            params.append(f"%{source_id}%")
+
+        query += " ORDER BY s.cidr_prefix ASC;"
+
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT * FROM network_segments ORDER BY cidr_prefix ASC;")
+            cur = conn.execute(query, params)
             return [
                 NetworkSegment(
                     segment_id=r["segment_id"],
@@ -1061,13 +1376,23 @@ class MetadataStore:
             )
             conn.commit()
 
-    def list_services(self, asset_id: str | None = None) -> list[NetworkService]:
-        query = "SELECT * FROM services WHERE 1=1"
+    def list_services(
+        self,
+        asset_id: str | None = None,
+        snapshot_id: str | None = None,
+    ) -> list[NetworkService]:
+        query = "SELECT DISTINCT s.* FROM services s"
         params: list[Any] = []
+        if snapshot_id:
+            query += " JOIN snapshot_nodes sn ON (s.asset_id = sn.asset_id OR sn.node_id = 'svc-' || s.service_id) WHERE sn.snapshot_id = ?"
+            params.append(snapshot_id)
+        else:
+            query += " WHERE 1=1"
+
         if asset_id:
-            query += " AND asset_id = ?"
+            query += " AND s.asset_id = ?"
             params.append(asset_id)
-        query += " ORDER BY server_ip, port ASC;"
+        query += " ORDER BY s.server_ip, s.port ASC;"
 
         with self._get_connection() as conn:
             cur = conn.execute(query, params)
@@ -1134,13 +1459,20 @@ class MetadataStore:
         asset_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        snapshot_id: str | None = None,
     ) -> list[CommunicationRelationship]:
-        query = "SELECT * FROM communication_relationships WHERE 1=1"
+        query = "SELECT DISTINCT r.* FROM communication_relationships r"
         params: list[Any] = []
+        if snapshot_id:
+            query += " JOIN snapshot_edges se ON (se.edge_id = 'edge-comm-' || r.relationship_id OR se.edge_id = 'edge-l2-' || r.relationship_id) WHERE se.snapshot_id = ?"
+            params.append(snapshot_id)
+        else:
+            query += " WHERE 1=1"
+
         if asset_id:
-            query += " AND (src_asset_id = ? OR dst_asset_id = ?)"
+            query += " AND (r.src_asset_id = ? OR r.dst_asset_id = ?)"
             params.extend([asset_id, asset_id])
-        query += " ORDER BY packet_count DESC LIMIT ? OFFSET ?;"
+        query += " ORDER BY r.packet_count DESC LIMIT ? OFFSET ?;"
         params.extend([limit, offset])
 
         with self._get_connection() as conn:
@@ -1276,10 +1608,10 @@ class MetadataStore:
                 metadata=json.loads(row["metadata_json"]),
             )
 
-    def list_snapshots(self) -> list[TopologySnapshot]:
+    def list_snapshots(self, capture_id: str | None = None) -> list[TopologySnapshot]:
         with self._get_connection() as conn:
             cur = conn.execute("SELECT * FROM topology_snapshots ORDER BY created_at DESC;")
-            return [
+            all_snaps = [
                 TopologySnapshot(
                     snapshot_id=row["snapshot_id"],
                     name=row["name"],
@@ -1296,6 +1628,16 @@ class MetadataStore:
                 )
                 for row in cur.fetchall()
             ]
+            if not capture_id:
+                return all_snaps
+
+            filtered = []
+            for s in all_snaps:
+                if capture_id in s.source_captures:
+                    filtered.append(s)
+                elif s.metadata and s.metadata.get("capture_id") == capture_id:
+                    filtered.append(s)
+            return filtered
 
     def get_snapshot_graph(self, snapshot_id: str) -> TopologyGraph | None:
         snapshot = self.get_snapshot(snapshot_id)
@@ -1389,6 +1731,12 @@ class MetadataStore:
                 for r in cur.fetchall()
             ]
 
+    def delete_config_import(self, import_id: str) -> bool:
+        with self._get_connection() as conn:
+            cur = conn.execute("DELETE FROM imported_configurations WHERE import_id = ?;", (import_id,))
+            conn.commit()
+            return cur.rowcount > 0
+
     # --- Phase 03: Executable Network Models & Simulation ---
 
     def save_network_model(self, model: NetworkModel) -> None:
@@ -1400,11 +1748,12 @@ class MetadataStore:
                 if not cur.fetchone():
                     conn.execute(
                         """
-                        INSERT OR IGNORE INTO topology_snapshots (
+                        INSERT INTO topology_snapshots (
                             snapshot_id, name, created_at, source_captures_json, source_configs_json,
                             identity_policy_version, graph_algorithm_version, node_count, edge_count,
                             unresolved_conflicts_json, schema_version, metadata_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT (snapshot_id) DO NOTHING;
                         """,
                         (
                             model.source_snapshot_id,
@@ -1457,9 +1806,15 @@ class MetadataStore:
                 return None
             return NetworkModel.model_validate_json(row["model_json"])
 
-    def list_network_models(self) -> list[NetworkModel]:
+    def list_network_models(self, is_counterfactual: bool | None = None) -> list[NetworkModel]:
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT model_json FROM network_models ORDER BY created_at DESC;")
+            if is_counterfactual is not None:
+                cur = conn.execute(
+                    "SELECT model_json FROM network_models WHERE is_counterfactual = ? ORDER BY created_at DESC;",
+                    (1 if is_counterfactual else 0,),
+                )
+            else:
+                cur = conn.execute("SELECT model_json FROM network_models ORDER BY created_at DESC;")
             return [NetworkModel.model_validate_json(r["model_json"]) for r in cur.fetchall()]
 
     def save_scenario(self, scenario: SimulationScenario) -> None:
@@ -2495,8 +2850,14 @@ class MetadataStore:
             )
             conn.execute(
                 """
-                INSERT OR REPLACE INTO benchmark_metrics (metric_id, run_id, metric_name, metric_value, sample_count, created_at)
-                VALUES (?, ?, ?, ?, ?, ?);
+                INSERT INTO benchmark_metrics (metric_id, run_id, metric_name, metric_value, sample_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (metric_id) DO UPDATE SET
+                    run_id = excluded.run_id,
+                    metric_name = excluded.metric_name,
+                    metric_value = excluded.metric_value,
+                    sample_count = excluded.sample_count,
+                    created_at = excluded.created_at;
                 """,
                 (
                     f"{run.run_id}-throughput",
@@ -2725,13 +3086,30 @@ class MetadataStore:
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO investigation_executions (
+                INSERT INTO investigation_executions (
                     execution_id, investigation_id, execution_index, investigation_type,
                     engine_version, rule_version, started_at_iso, completed_at_iso,
                     execution_duration_ms, status, replay_of_execution_id, model_id,
                     model_fingerprint, overall_evidence_digest, sufficiency,
                     primary_root_cause_id, execution_record_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (execution_id) DO UPDATE SET
+                    investigation_id = excluded.investigation_id,
+                    execution_index = excluded.execution_index,
+                    investigation_type = excluded.investigation_type,
+                    engine_version = excluded.engine_version,
+                    rule_version = excluded.rule_version,
+                    started_at_iso = excluded.started_at_iso,
+                    completed_at_iso = excluded.completed_at_iso,
+                    execution_duration_ms = excluded.execution_duration_ms,
+                    status = excluded.status,
+                    replay_of_execution_id = excluded.replay_of_execution_id,
+                    model_id = excluded.model_id,
+                    model_fingerprint = excluded.model_fingerprint,
+                    overall_evidence_digest = excluded.overall_evidence_digest,
+                    sufficiency = excluded.sufficiency,
+                    primary_root_cause_id = excluded.primary_root_cause_id,
+                    execution_record_json = excluded.execution_record_json;
                 """,
                 (
                     record.execution_id,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAnalysisContext } from '../../context/AnalysisContext';
 import { apiClient } from '../../api/client';
 import type {
   InvestigationCase,
@@ -40,6 +41,8 @@ import {
 } from 'lucide-react';
 
 export const InvestigationWorkbench: React.FC = () => {
+  const { activeCaptureId: _activeCaptureId, activeCapture, activeSnapshotId } = useAnalysisContext();
+
   const [cases, setCases] = useState<InvestigationCase[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState<string>('');
   const [currentCase, setCurrentCase] = useState<InvestigationCase | null>(null);
@@ -480,6 +483,25 @@ export const InvestigationWorkbench: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {activeCapture && (
+        <div className="bg-indigo-950/40 border border-indigo-700/50 rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono">
+          <div className="flex items-center gap-2 text-gray-300">
+            <span className="text-gray-400">Active Capture Scope:</span>
+            <span className="text-cyan-300 font-semibold">{activeCapture.filename}</span>
+            {activeSnapshotId && (
+              <>
+                <span className="text-gray-500">|</span>
+                <span className="text-gray-400">Snapshot:</span>
+                <span className="text-indigo-300">{activeSnapshotId}</span>
+              </>
+            )}
+          </div>
+          <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+            Active Context Bound
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-md text-rose-300 text-xs flex items-center gap-2">

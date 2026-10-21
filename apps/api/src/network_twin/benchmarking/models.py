@@ -2,8 +2,9 @@
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class BenchmarkProvenance(StrEnum):
@@ -60,6 +61,25 @@ class BenchmarkFixtureMeta(BaseModel):
     byte_size: int
     content_sha256: str
     expected_properties: ExpectedOutcome
+    byte_count: int | None = None
+    expected_outcome: ExpectedOutcome | None = None
+    provenance_details: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_compat_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "byte_count" not in data or data["byte_count"] is None:
+                data["byte_count"] = data.get("byte_size", 0)
+            if "byte_size" not in data or data["byte_size"] is None:
+                data["byte_size"] = data.get("byte_count", 0)
+            if "expected_outcome" not in data or data["expected_outcome"] is None:
+                data["expected_outcome"] = data.get("expected_properties")
+            if "expected_properties" not in data or data["expected_properties"] is None:
+                data["expected_properties"] = data.get("expected_outcome")
+            if "provenance_details" not in data or data["provenance_details"] is None:
+                data["provenance_details"] = data.get("description", "")
+        return data
 
 
 class DecodingStageMetrics(BaseModel):
@@ -70,6 +90,21 @@ class DecodingStageMetrics(BaseModel):
     duration_ms: float
     throughput_pkts_per_sec: float
     errors_encountered: list[str] = Field(default_factory=list)
+    packet_count: int | None = None
+    byte_count: int | None = None
+    throughput_pps: float | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_compat_metrics(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "packet_count" not in data or data["packet_count"] is None:
+                data["packet_count"] = data.get("packets_decoded", 0)
+            if "byte_count" not in data or data["byte_count"] is None:
+                data["byte_count"] = data.get("bytes_processed", 0)
+            if "throughput_pps" not in data or data["throughput_pps"] is None:
+                data["throughput_pps"] = data.get("throughput_pkts_per_sec", 0.0)
+        return data
 
 
 class DeterministicStageMetrics(BaseModel):
@@ -82,6 +117,9 @@ class DeterministicStageMetrics(BaseModel):
     invariant_matches_expected: bool
     witness_path_length: int = 0
     duration_ms: float
+    topology_node_count: int | None = None
+    topology_edge_count: int | None = None
+    violation_count: int | None = None
 
 
 class PredictiveStageMetrics(BaseModel):
@@ -117,9 +155,25 @@ class ConsensusStageMetrics(BaseModel):
 class OperationalProfile(BaseModel):
     """Resource utilization and execution profile."""
 
-    total_runtime_ms: float
+    total_runtime_ms: float = 0.0
     peak_memory_mb: float = 0.0
     storage_bytes_delta: int = 0
+    memory_growth_mb: float | None = None
+    cpu_duration_ms: float | None = None
+    wall_duration_ms: float | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_profile_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            total = data.get("total_runtime_ms", 0.0)
+            if "wall_duration_ms" not in data or data["wall_duration_ms"] is None:
+                data["wall_duration_ms"] = total
+            if "cpu_duration_ms" not in data or data["cpu_duration_ms"] is None:
+                data["cpu_duration_ms"] = total
+            if "memory_growth_mb" not in data or data["memory_growth_mb"] is None:
+                data["memory_growth_mb"] = 0.0
+        return data
 
 
 class BenchmarkRunRecord(BaseModel):
@@ -140,7 +194,43 @@ class BenchmarkRunRecord(BaseModel):
     predictive: PredictiveStageMetrics | None = None
     consensus: ConsensusStageMetrics | None = None
     operational: OperationalProfile
+    profile: OperationalProfile | None = None
+    timestamp_iso: str | None = None
+    verification_passed: bool | None = None
+    failure_reasons: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_compat_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if ("profile" not in data or data["profile"] is None) and data.get("operational"):
+                data["profile"] = data["operational"]
+            if ("operational" not in data or data["operational"] is None) and data.get("profile"):
+                data["operational"] = data["profile"]
+            if ("timestamp_iso" not in data or data["timestamp_iso"] is None) and data.get("executed_at"):
+                data["timestamp_iso"] = data["executed_at"]
+            if ("executed_at" not in data or data["executed_at"] is None) and data.get("timestamp_iso"):
+                data["executed_at"] = data["timestamp_iso"]
+            if "verification_passed" not in data or data["verification_passed"] is None:
+                data["verification_passed"] = data.get("status") == "COMPLETED"
+            if "failure_reasons" not in data or data["failure_reasons"] is None:
+                data["failure_reasons"] = data.get("limitations", [])
+            if "limitations" not in data or data["limitations"] is None:
+                data["limitations"] = data.get("failure_reasons", [])
+        return data
+
+    @model_validator(mode="after")
+    def populate_post_validation_fields(self) -> "BenchmarkRunRecord":
+        if not self.timestamp_iso:
+            self.timestamp_iso = self.executed_at
+        if not self.profile:
+            self.profile = self.operational
+        if self.verification_passed is None:
+            self.verification_passed = self.status == "COMPLETED"
+        if not self.failure_reasons:
+            self.failure_reasons = list(self.limitations)
+        return self
 
 
 class BenchmarkRunRequest(BaseModel):

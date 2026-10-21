@@ -43,6 +43,7 @@ class AnalysisSummaryModel(BaseModel):
     http_responses: int = 0
     tls_handshakes: int = 0
     quic_datagrams: int = 0
+    ptp_messages: int = 0
     protocol_counts: dict[str, int] = Field(default_factory=dict)
     parser_status_counts: dict[str, int] = Field(default_factory=dict)
     tcp_state_counts: dict[str, int] = Field(default_factory=dict)
@@ -52,6 +53,7 @@ class AnalysisSummaryModel(BaseModel):
 
 class AnalysisJob(BaseModel):
     job_id: str
+    capture_id: str | None = None
     filename: str
     file_size_bytes: int
     status: str = "completed"  # pending, processing, completed, failed
@@ -63,6 +65,7 @@ class AnalysisJob(BaseModel):
 
 class JobUploadResponse(BaseModel):
     job_id: str
+    capture_id: str | None = None
     filename: str
     file_size_bytes: int
     status: str
