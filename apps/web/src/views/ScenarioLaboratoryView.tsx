@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAnalysisContext } from '../context/AnalysisContext';
 import {
   GitCompare,
@@ -40,6 +40,11 @@ export const ScenarioLaboratoryView: React.FC = () => {
   const [runError, setRunError] = useState<string | null>(null);
   const [lastLiveRunId, setLastLiveRunId] = useState<string | null>(null);
 
+  const selectedModelIdRef = useRef(selectedModelId);
+  selectedModelIdRef.current = selectedModelId;
+  const selectedScenarioIdRef = useRef(selectedScenarioId);
+  selectedScenarioIdRef.current = selectedScenarioId;
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -51,11 +56,16 @@ export const ScenarioLaboratoryView: React.FC = () => {
       ]);
 
       setModels(modelsData);
-      let chosenModelId = selectedModelId;
-      if (!chosenModelId) {
+      setScenarios(scenariosData);
+      setInvariants(invariantsData);
+
+      let chosenModelId = selectedModelIdRef.current;
+      if (!chosenModelId || !modelsData.some((m) => m.model_id === chosenModelId)) {
         if (activeSnapshotId) {
           const matchingSnapModel = modelsData.find((m) => m.source_snapshot_id === activeSnapshotId);
-          if (matchingSnapModel) chosenModelId = matchingSnapModel.model_id;
+          if (matchingSnapModel) {
+            chosenModelId = matchingSnapModel.model_id;
+          }
         }
         if (!chosenModelId) {
           chosenModelId = modelsData.find((m) => !m.is_counterfactual)?.model_id || modelsData[0]?.model_id || '';
@@ -63,12 +73,12 @@ export const ScenarioLaboratoryView: React.FC = () => {
       }
       setSelectedModelId(chosenModelId);
 
-      setScenarios(scenariosData);
-      const matching = scenariosData.find((s) => s.base_model_id === chosenModelId);
-      const chosenScenId = selectedScenarioId || matching?.scenario_id || scenariosData[0]?.scenario_id || '';
+      let chosenScenId = selectedScenarioIdRef.current;
+      if (!chosenScenId || !scenariosData.some((s) => s.scenario_id === chosenScenId)) {
+        const matching = scenariosData.find((s) => s.base_model_id === chosenModelId);
+        chosenScenId = matching?.scenario_id || scenariosData[0]?.scenario_id || '';
+      }
       setSelectedScenarioId(chosenScenId);
-
-      setInvariants(invariantsData);
 
       // Attempt to load existing result for chosen scenario
       if (chosenScenId) {
@@ -78,13 +88,15 @@ export const ScenarioLaboratoryView: React.FC = () => {
         } catch {
           setCounterfactualResult(null);
         }
+      } else {
+        setCounterfactualResult(null);
       }
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to load scenario laboratory data');
     } finally {
       setLoading(false);
     }
-  }, [activeSnapshotId, selectedModelId, selectedScenarioId]);
+  }, [activeSnapshotId]);
 
   useEffect(() => {
     loadData();
