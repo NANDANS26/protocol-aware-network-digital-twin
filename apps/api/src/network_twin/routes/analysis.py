@@ -69,7 +69,7 @@ async def upload_capture(
     summary="Run protocol analysis on synthetic sample capture fixture",
 )
 async def run_demo_analysis(
-    format: str = Query("pcap", enum=["pcap", "pcapng"]),
+    format: str = Query("pcap", pattern="^(pcap|pcapng)$"),
     service: AnalysisService = Depends(get_analysis_service),
 ):
     """Executes the C++ protocol engine on the deterministic test fixture."""
